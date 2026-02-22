@@ -1,0 +1,133 @@
+scan_dependencies:
+  description: >
+    Read the requirements.txt file at {requirements_path} and check each package
+    against PyPI for the latest stable version.
+
+    For each package:
+    1. Get the current pinned/constrained version from requirements.txt
+    2. Check PyPI for the latest stable version
+    3. Determine if the update is: MAJOR (breaking), SECURITY patch, or minor
+
+    Only report packages that are:
+    - A MAJOR version behind (e.g., Django 4.x when 5.x is available)
+    - Have a known security patch available
+    - Are significantly outdated (>2 minor versions behind)
+
+    Output format per package:
+    - Package name
+    - Current version
+    - Latest version
+    - Update type (MAJOR/SECURITY/MINOR)
+    - GitHub repository URL (if available)
+  expected_output: >
+    A structured list of packages needing attention, with their current version,
+    latest version, update type, and GitHub URL. Also include the total count
+    of packages scanned.
+  agent: dependency_scanner
+
+check_api_status:
+  description: >
+    Check the deprecation status of all monitored APIs configured in the
+    monitored_apis.yaml file.
+
+    For each API:
+    1. Fetch the API status/changelog page
+    2. Analyze whether our current version is deprecated or approaching sunset
+    3. Determine the recommended version to upgrade to
+    4. Identify the sunset/end-of-life date if available
+
+    Pay special attention to:
+    - Meta/WhatsApp Graph API version lifecycle (they sunset versions ~2 years after release)
+    - Stripe API dated versions
+    - Django LTS support timeline
+  expected_output: >
+    For each monitored API: the current status (active/deprecated/sunset),
+    the recommended version, any sunset dates, and whether action is needed.
+  agent: api_deprecation_monitor
+
+check_vulnerabilities:
+  description: >
+    For each package identified in the dependency scan, check the OSV.dev
+    vulnerability database for known security issues.
+
+    Focus on:
+    1. CRITICAL severity (CVSS >= 9.0) - immediate action required
+    2. HIGH severity (CVSS >= 7.0) - action required soon
+    3. Skip MEDIUM and LOW unless they are actively exploited
+
+    For each vulnerability found:
+    - CVE/GHSA identifier
+    - Severity level and CVSS score
+    - Brief description of the vulnerability
+    - Fixed version number
+    - Whether it's actively exploited
+
+    Use the vulnerability scanner tool with the format: "package_name version"
+    (e.g., "django 5.2.11").
+
+    Here are the packages to check: {packages_to_check}
+  expected_output: >
+    A list of vulnerabilities found, grouped by severity (CRITICAL first),
+    with CVE identifiers, descriptions, and fixed versions. If no vulnerabilities
+    are found, explicitly state that.
+  agent: security_checker
+
+analyze_breaking_changes:
+  description: >
+    For each significantly outdated package (MAJOR version behind or with breaking
+    changes noted), fetch the GitHub release notes and analyze them.
+
+    Focus ONLY on:
+    1. Breaking changes that would cause errors in existing code
+    2. Deprecated features that will be removed
+    3. Required migration steps
+
+    Ignore:
+    - New features (unless they replace deprecated ones)
+    - Performance improvements
+    - Bug fixes (unless security-related)
+
+    Here are the packages to analyze: {packages_to_analyze}
+  expected_output: >
+    For each analyzed package: a summary of breaking changes, what will break
+    in the codebase, and required code changes. If no breaking changes, state
+    that the upgrade is safe.
+  agent: breaking_change_analyzer
+
+compile_and_send_report:
+  description: >
+    Compile all findings from previous agents into a comprehensive report and
+    send it via email. The report MUST be in Dutch (Netherlands).
+
+    ALWAYS send an email, regardless of whether action is needed or not.
+
+    1. Determine overall status:
+       - CRITICAL (kritiek): Security vulnerabilities, API sunset, app broken
+       - WARNING (waarschuwing): API deprecation soon, major version behind
+       - OK (alles ok): Everything up-to-date, no issues
+
+    2. Structure the email report (HTML) with:
+       - Subject line: "[FenoFin] ⚠️ X acties vereist" or "[FenoFin] ✅ Alles up-to-date"
+       - KRITIEK section (red) with action steps
+       - WAARSCHUWING section (orange) with action steps
+       - Status overzicht (all checks summarized)
+       - Tip van de week: a relevant development tip for Django/Celery/Python stack
+       - Spreuk van de week: a motivational quote about resilience/perseverance
+       - Token usage and estimated costs: {token_info}
+
+    3. For each finding, provide CONCRETE implementation steps:
+       - Exact commands to run (pip install, pytest, etc.)
+       - Files that likely need changes
+       - What to test after the change
+
+    4. Use the Email Sender tool with format:
+       SUBJECT: [subject line]
+
+       BODY:
+       [HTML content]
+
+    Here are all the findings to compile: {all_findings}
+  expected_output: >
+    Confirmation that the email was sent, along with the full report content
+    including status, findings, action steps, tip, and quote.
+  agent: action_report_writer

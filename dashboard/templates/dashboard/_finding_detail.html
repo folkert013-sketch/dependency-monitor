@@ -1,0 +1,12 @@
+{% load report_filters %}
+
+{% if finding.action_steps %}
+<div class="border-t border-gray-200 pt-3 mt-2">
+    <h4 class="font-medium text-gray-800 text-sm mb-2">Implementatiestappen:</h4>
+    <div class="prose prose-sm max-w-none text-gray-700">
+        {{ finding.action_steps|render_markdown }}
+    </div>
+</div>
+{% else %}
+<p class="text-sm text-gray-500 italic mt-2">Geen specifieke actiestappen beschikbaar.</p>
+{% endif %}

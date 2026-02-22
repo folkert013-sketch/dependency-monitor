@@ -1,0 +1,15 @@
+apis:
+  - name: "Meta/WhatsApp Graph API"
+    status_url: "https://developers.facebook.com/docs/graph-api/changelog"
+    type: "versioned_api"
+    current_version: "v21.0"
+
+  - name: "Stripe API"
+    status_url: "https://stripe.com/docs/upgrades"
+    type: "dated_api"
+    current_version: "2024-06-20"
+
+  - name: "Django"
+    status_url: "https://www.djangoproject.com/download/"
+    type: "framework"
+    current_version: "5.2"

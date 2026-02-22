@@ -1,0 +1,32 @@
+{% extends "dashboard/base.html" %}
+{% load report_filters %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">Rapporten</h1>
+        <p class="text-gray-500 mt-1">Overzicht van alle dependency checks</p>
+    </div>
+    <div>
+        <select
+            hx-get="{% url 'dashboard:htmx_report_list' %}"
+            hx-target="#report-list"
+            hx-swap="innerHTML"
+            hx-include="this"
+            name="status"
+            class="rounded-lg border-gray-300 text-sm px-4 py-2 bg-white shadow-sm border focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        >
+            <option value="">Alle statussen</option>
+            <option value="critical" {% if status_filter == "critical" %}selected{% endif %}>Kritiek</option>
+            <option value="warning" {% if status_filter == "warning" %}selected{% endif %}>Waarschuwing</option>
+            <option value="ok" {% if status_filter == "ok" %}selected{% endif %}>Alles OK</option>
+        </select>
+    </div>
+</div>
+
+<div id="report-list">
+    {% include "dashboard/_report_list.html" %}
+</div>
+{% endblock %}
