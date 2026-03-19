@@ -1,0 +1,51 @@
+{% extends "dashboard/base.html" %}
+{% load report_filters %}
+
+{% block title %}Dependency Monitor{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900">Rapporten</h1>
+        <p class="text-gray-500 mt-1">Overzicht van alle dependency checks</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <select
+            hx-get="{% url 'dashboard:htmx_report_list' %}"
+            hx-target="#report-list"
+            hx-swap="innerHTML"
+            hx-include="this"
+            name="status"
+            class="rounded-xl border-gray-200 text-sm px-4 py-2.5 bg-white shadow-sm border focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 hover:shadow-md transition-shadow"
+        >
+            <option value="">Alle statussen</option>
+            <option value="critical" {% if status_filter == "critical" %}selected{% endif %}>Kritiek</option>
+            <option value="warning" {% if status_filter == "warning" %}selected{% endif %}>Waarschuwing</option>
+            <option value="ok" {% if status_filter == "ok" %}selected{% endif %}>Alles OK</option>
+        </select>
+        {% if not active_job %}
+        <button
+            hx-post="{% url 'dashboard:start_scan' %}"
+            hx-target="#scan-area"
+            hx-swap="outerHTML"
+            class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-sm font-semibold rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition-all shadow-lg shadow-indigo-200 hover:shadow-xl">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            Start Scan
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Scan status area -->
+<div id="scan-area">
+    {% if active_job %}
+        {% include "dashboard/_scan_status.html" with job=active_job logs=active_job_logs %}
+    {% endif %}
+</div>
+
+<div id="report-list">
+    {% include "dashboard/_report_list.html" %}
+</div>
+{% endblock %}

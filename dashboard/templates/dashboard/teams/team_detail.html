@@ -1,0 +1,78 @@
+{% extends "dashboard/base.html" %}
+{% load report_filters %}
+
+{% block title %}{{ team.name }} — AI Teams{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav class="flex items-center gap-2 text-sm text-gray-500 mb-6">
+    <a href="{% url 'dashboard:team_list' %}" class="hover:text-indigo-600 transition-colors">AI Teams</a>
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+    <span class="text-gray-900 font-medium">{{ team.name }}</span>
+</nav>
+
+<!-- Team Header -->
+<div id="team-header">
+    {% include "dashboard/teams/_team_header.html" %}
+</div>
+
+<!-- Variables Section -->
+<div id="variables-area" class="mt-8">
+    {% include "dashboard/teams/_variables.html" %}
+</div>
+
+<!-- Agents & Tasks Section -->
+<div id="agents-tasks-area" class="mt-8">
+    {% include "dashboard/teams/_agents_and_tasks.html" %}
+</div>
+
+<!-- Run Section -->
+<div id="run-section" class="mt-8">
+    {% include "dashboard/teams/_run_status.html" %}
+</div>
+
+<!-- Danger Zone -->
+<div class="mt-12 border border-red-200 rounded-xl p-6">
+    <h3 class="text-sm font-semibold text-red-700 uppercase tracking-wide mb-3">Danger zone</h3>
+    <div class="flex items-center justify-between">
+        <div>
+            <p class="text-sm text-gray-700 font-medium">Team verwijderen</p>
+            <p class="text-xs text-gray-500">Dit verwijdert het team en alle bijbehorende agents, taken en variabelen permanent.</p>
+        </div>
+        <form method="post" action="{% url 'dashboard:team_delete' team.slug %}" data-confirm="Weet je zeker dat je dit team wilt verwijderen? Dit kan niet ongedaan worden gemaakt.">
+            {% csrf_token %}
+            <button type="submit" class="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
+                Team verwijderen
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Suggested models datalists for JS model switching -->
+<datalist id="models-gemini">
+    {% for m in suggested_models.gemini %}<option value="{{ m }}">{% endfor %}
+</datalist>
+<datalist id="models-anthropic">
+    {% for m in suggested_models.anthropic %}<option value="{{ m }}">{% endfor %}
+</datalist>
+<datalist id="models-openai">
+    {% for m in suggested_models.openai %}<option value="{{ m }}">{% endfor %}
+</datalist>
+
+<script>
+function switchModelList(selectEl, inputId) {
+    var provider = selectEl.value;
+    var input = document.getElementById(inputId);
+    if (input) {
+        input.setAttribute('list', 'models-' + provider);
+        // Set a sensible default
+        var defaults = {
+            'gemini': 'gemini-3-flash-preview',
+            'anthropic': 'claude-sonnet-4-6',
+            'openai': 'gpt-4o'
+        };
+        if (defaults[provider]) input.value = defaults[provider];
+    }
+}
+</script>
+{% endblock %}

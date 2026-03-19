@@ -1,0 +1,30 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}{% if group %}{{ group.name }} bewerken{% else %}Nieuwe groep{% endif %}{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <a href="{% url 'dashboard:sales_home' %}" class="text-sm text-gray-500 hover:text-indigo-600 transition-colors">&larr; Terug naar Sales</a>
+    <h1 class="text-3xl font-bold text-gray-900 mt-2">{% if group %}Groep bewerken{% else %}Nieuwe groep{% endif %}</h1>
+</div>
+
+<div class="bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm max-w-xl">
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Naam</label>
+            <input type="text" name="name" required value="{{ group.name|default:"" }}" placeholder="bijv. Administratiekantoren Utrecht" class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Beschrijving</label>
+            <textarea name="description" rows="3" placeholder="Optionele beschrijving van deze groep..." class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">{{ group.description|default:"" }}</textarea>
+        </div>
+        <div class="flex justify-end gap-3 pt-2">
+            <a href="{% url 'dashboard:sales_home' %}" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">Annuleren</a>
+            <button type="submit" class="px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-xl hover:from-emerald-700 hover:to-emerald-800 shadow-lg shadow-emerald-200 transition-all">
+                {% if group %}Opslaan{% else %}Aanmaken{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

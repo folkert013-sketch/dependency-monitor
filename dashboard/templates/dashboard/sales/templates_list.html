@@ -1,0 +1,322 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Reactie Templates{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900">Reactie Templates</h1>
+        <p class="text-gray-500 mt-1">Voorgedefinieerde berichten voor prospects</p>
+    </div>
+    <a href="{% url 'dashboard:response_template_create' %}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-sm font-semibold rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition-all shadow-lg shadow-indigo-200 hover:shadow-xl">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Nieuw template
+    </a>
+</div>
+
+<!-- Filter bar -->
+<div class="bg-white rounded-2xl border border-gray-200/60 p-4 mb-6 shadow-sm">
+    <div class="flex flex-col lg:flex-row gap-3 items-start lg:items-center">
+        <!-- Search -->
+        <div class="relative flex-shrink-0 w-full lg:w-64">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="text" id="template-search" placeholder="Zoek op naam of inhoud..."
+                   class="w-full pl-10 pr-4 py-2 rounded-xl border-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <!-- Category pills -->
+        <div class="flex items-center gap-1.5 flex-wrap flex-1" id="category-filter">
+            <button type="button" onclick="filterCategory('all')" data-cat="all"
+                    class="cat-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-indigo-100 text-indigo-700">
+                Alle
+            </button>
+            {% for cat in categories %}
+            <button type="button" onclick="filterCategory('{{ cat.pk }}')" data-cat="{{ cat.pk }}"
+                    class="cat-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200">
+                <span class="inline-block w-2 h-2 rounded-full bg-{{ cat.color }}-400 mr-1"></span>{{ cat.name }}
+            </button>
+            {% endfor %}
+            <button type="button" onclick="filterCategory('none')" data-cat="none"
+                    class="cat-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200">
+                Zonder categorie
+            </button>
+        </div>
+        <!-- Star filter -->
+        <button type="button" onclick="toggleStarFilter()" id="star-filter-btn"
+                class="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-amber-50 hover:text-amber-600">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+            </svg>
+            Favorieten
+        </button>
+    </div>
+</div>
+
+<!-- Categories management (collapsible) -->
+<details class="mb-6">
+    <summary class="cursor-pointer text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors inline-flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+        Categorieën beheren
+    </summary>
+    <div class="mt-3">
+        {% include "dashboard/sales/_categories.html" %}
+    </div>
+</details>
+
+<!-- Count + hint -->
+<div class="flex items-center justify-between mb-4">
+    <p class="text-sm text-gray-500" id="template-count">{{ templates|length }} template{{ templates|length|pluralize }}</p>
+    <p class="text-xs text-gray-400 hidden sm:block">Gebruik pijltjes om de volgorde te wijzigen</p>
+</div>
+
+<!-- Template list -->
+<div id="templates-list" class="space-y-3">
+    {% for tpl in templates %}
+    <div class="template-card bg-white rounded-2xl border border-gray-200/60 shadow-sm hover:shadow-md transition-shadow"
+         data-category="{{ tpl.category_id|default:'none' }}"
+         data-starred="{{ tpl.is_starred|yesno:'true,false' }}"
+         data-search="{{ tpl.name|lower }} {{ tpl.subject|lower }} {{ tpl.body|lower|truncatewords:30 }}"
+         data-pk="{{ tpl.pk }}">
+        <div class="flex items-start gap-3 p-5">
+            <!-- Move buttons -->
+            <div class="flex flex-col gap-0.5 flex-shrink-0">
+                <form method="post" action="{% url 'dashboard:response_template_move' tpl.pk 'up' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="p-1 text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Omhoog">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+                    </button>
+                </form>
+                <form method="post" action="{% url 'dashboard:response_template_move' tpl.pk 'down' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="p-1 text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Omlaag">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Star toggle -->
+            {% include "dashboard/sales/_star_button.html" with tpl=tpl %}
+
+            <!-- Content -->
+            <div class="flex-1 min-w-0">
+                <!-- Row 1: Name + category badge -->
+                <div class="flex items-center gap-2 flex-wrap">
+                    <h3 class="font-semibold text-gray-900">{{ tpl.name }}</h3>
+                    {% if tpl.category %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-{{ tpl.category.color }}-100 text-{{ tpl.category.color }}-700">{{ tpl.category.name }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Row 2: Subject with copy button -->
+                {% if tpl.subject %}
+                <div class="flex items-center gap-2 mt-1.5">
+                    <span class="text-xs font-medium text-gray-400 flex-shrink-0">Onderwerp:</span>
+                    <span class="text-sm text-gray-700 truncate" id="tpl-subject-{{ tpl.pk }}">{{ tpl.subject }}</span>
+                    <button onclick="event.stopPropagation(); copyText('tpl-subject-{{ tpl.pk }}', 'Onderwerp gekopieerd')"
+                            class="flex-shrink-0 p-1 text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                            title="Onderwerp kopiëren">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                    </button>
+                </div>
+                {% endif %}
+
+                <!-- Row 3: Body (collapsible) with copy button -->
+                <div class="flex items-start gap-2 mt-2">
+                    <div class="template-body flex-1 text-sm text-gray-600 whitespace-pre-line bg-gray-50/50 rounded-xl p-3 border border-gray-100 max-h-20 overflow-hidden cursor-pointer relative"
+                         onclick="toggleBody(this)" id="tpl-body-{{ tpl.pk }}">{{ tpl.body }}<div class="body-fade absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-gray-50 to-transparent rounded-b-xl pointer-events-none"></div>
+                    </div>
+                    <button onclick="copyText('tpl-body-{{ tpl.pk }}', 'Bericht gekopieerd')"
+                            class="flex-shrink-0 p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="Bericht kopiëren">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                    </button>
+                </div>
+
+                <!-- Row 4: Actions -->
+                <div class="flex items-center justify-end gap-1 mt-2">
+                    <button type="button" onclick="openPreview('{% url 'dashboard:response_template_preview' tpl.slug %}', '{{ tpl.name|escapejs }}')"
+                            class="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Preview">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </button>
+                    <a href="{% url 'dashboard:response_template_edit' tpl.slug %}" class="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Bewerken">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    </a>
+                    <form method="post" action="{% url 'dashboard:response_template_delete' tpl.slug %}" data-confirm="Weet je zeker dat je '{{ tpl.name }}' wilt verwijderen?">
+                        {% csrf_token %}
+                        <button type="submit" class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Verwijderen">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="text-center py-16" id="empty-state">
+        <div class="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900 mb-1">Nog geen templates</h3>
+        <p class="text-gray-500 mb-6">Maak je eerste reactie-template aan.</p>
+        <a href="{% url 'dashboard:response_template_create' %}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-sm font-semibold rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition-all shadow-lg shadow-indigo-200">
+            Eerste template aanmaken
+        </a>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- No filter results -->
+<div id="no-results" class="hidden text-center py-12">
+    <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+    <p class="text-gray-500">Geen templates gevonden voor dit filter</p>
+    <button type="button" onclick="resetFilters()" class="mt-3 text-sm text-indigo-600 hover:text-indigo-700 font-medium">Filters wissen</button>
+</div>
+
+<script>
+// --- State ---
+var currentCategory = 'all';
+var starFilterActive = false;
+var searchQuery = '';
+
+// --- Filtering ---
+function filterTemplates() {
+    var cards = document.querySelectorAll('.template-card');
+    var visible = 0;
+
+    cards.forEach(function(card) {
+        var matchCat = currentCategory === 'all' || card.dataset.category === currentCategory;
+        var matchStar = !starFilterActive || card.dataset.starred === 'true';
+        var matchSearch = !searchQuery || card.dataset.search.indexOf(searchQuery) !== -1;
+
+        if (matchCat && matchStar && matchSearch) {
+            card.style.display = '';
+            visible++;
+        } else {
+            card.style.display = 'none';
+        }
+    });
+
+    var countEl = document.getElementById('template-count');
+    if (countEl) countEl.textContent = visible + ' template' + (visible !== 1 ? 's' : '');
+
+    var noResults = document.getElementById('no-results');
+    if (noResults) noResults.classList.toggle('hidden', visible > 0 || cards.length === 0);
+}
+
+function filterCategory(cat) {
+    currentCategory = cat;
+    document.querySelectorAll('.cat-pill').forEach(function(pill) {
+        var isActive = pill.dataset.cat === cat;
+        pill.classList.toggle('bg-indigo-100', isActive);
+        pill.classList.toggle('text-indigo-700', isActive);
+        pill.classList.toggle('bg-gray-100', !isActive);
+        pill.classList.toggle('text-gray-600', !isActive);
+    });
+    filterTemplates();
+}
+
+function toggleStarFilter() {
+    starFilterActive = !starFilterActive;
+    var btn = document.getElementById('star-filter-btn');
+    btn.classList.toggle('bg-amber-100', starFilterActive);
+    btn.classList.toggle('text-amber-700', starFilterActive);
+    btn.classList.toggle('bg-gray-100', !starFilterActive);
+    btn.classList.toggle('text-gray-600', !starFilterActive);
+    filterTemplates();
+}
+
+function resetFilters() {
+    currentCategory = 'all';
+    starFilterActive = false;
+    searchQuery = '';
+    document.getElementById('template-search').value = '';
+    document.getElementById('star-filter-btn').classList.remove('bg-amber-100', 'text-amber-700');
+    document.getElementById('star-filter-btn').classList.add('bg-gray-100', 'text-gray-600');
+    document.querySelectorAll('.cat-pill').forEach(function(pill) {
+        var isAll = pill.dataset.cat === 'all';
+        pill.classList.toggle('bg-indigo-100', isAll);
+        pill.classList.toggle('text-indigo-700', isAll);
+        pill.classList.toggle('bg-gray-100', !isAll);
+        pill.classList.toggle('text-gray-600', !isAll);
+    });
+    filterTemplates();
+}
+
+// Search
+document.getElementById('template-search').addEventListener('input', function(e) {
+    searchQuery = e.target.value.toLowerCase().trim();
+    filterTemplates();
+});
+
+// --- Star toggle event (from HTMX) ---
+document.body.addEventListener('starToggled', function(e) {
+    var detail = e.detail;
+    var card = document.querySelector('.template-card[data-pk="' + detail.pk + '"]');
+    if (card) {
+        card.dataset.starred = detail.starred ? 'true' : 'false';
+        filterTemplates();
+    }
+});
+
+// --- Body expand/collapse ---
+function toggleBody(el) {
+    var isCollapsed = el.classList.contains('max-h-20');
+    el.classList.toggle('max-h-20', !isCollapsed);
+    el.classList.toggle('overflow-hidden', !isCollapsed);
+    var fade = el.querySelector('.body-fade');
+    if (fade) fade.classList.toggle('hidden', isCollapsed);
+}
+
+// --- Copy ---
+function copyText(elementId, toastMessage) {
+    var el = document.getElementById(elementId);
+    if (!el) return;
+    navigator.clipboard.writeText(el.textContent.trim()).then(function() {
+        if (typeof showToast === 'function') {
+            showToast({type: 'success', message: toastMessage || 'Gekopieerd naar klembord', duration: 2000});
+        }
+    });
+}
+
+// --- Preview modal ---
+function openPreview(url, name) {
+    var modal = document.getElementById('preview-modal');
+    var title = document.getElementById('preview-modal-title');
+    var iframe = document.getElementById('preview-iframe');
+    title.textContent = name;
+    iframe.src = url;
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+function closePreview() {
+    var modal = document.getElementById('preview-modal');
+    var iframe = document.getElementById('preview-iframe');
+    iframe.src = '';
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+</script>
+
+<!-- Preview Modal -->
+<div id="preview-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closePreview()"></div>
+    <!-- Modal content -->
+    <div class="relative w-full max-w-3xl mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden" style="height:85vh;">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                <h3 id="preview-modal-title" class="font-semibold text-gray-900 truncate">Preview</h3>
+            </div>
+            <button onclick="closePreview()" class="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors" title="Sluiten">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <!-- Iframe -->
+        <iframe id="preview-iframe" class="w-full border-0" style="height:calc(85vh - 65px);" sandbox="allow-same-origin"></iframe>
+    </div>
+</div>
+
+{% endblock %}

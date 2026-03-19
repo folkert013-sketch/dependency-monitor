@@ -4,12 +4,15 @@
 {% block title %}Rapport {{ report.created_at|date:"d M Y" }}{% endblock %}
 
 {% block content %}
-<div class="mb-6">
-    <a href="{% url 'dashboard:home' %}" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">&larr; Terug naar overzicht</a>
-</div>
+<!-- Breadcrumb -->
+<nav class="flex items-center gap-2 text-sm text-gray-500 mb-6">
+    <a href="{% url 'dashboard:dependency_home' %}" class="hover:text-indigo-600 transition-colors">Rapporten</a>
+    <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+    <span class="text-gray-400">{{ report.created_at|date:"d M Y, H:i" }}</span>
+</nav>
 
 <!-- Status Header -->
-<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+<div class="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-6 mb-6">
     <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">
             <span class="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold {{ report.status|status_bg }}">
@@ -27,23 +30,23 @@
     </div>
 </div>
 
-<!-- Stats -->
+<!-- Stats with gradient backgrounds -->
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+    <div class="bg-gradient-to-br from-white to-slate-50 rounded-2xl shadow-sm border border-gray-200/60 p-4 text-center">
         <p class="text-2xl font-bold text-gray-900">{{ report.total_dependencies }}</p>
-        <p class="text-xs text-gray-500">Dependencies</p>
+        <p class="text-xs text-gray-500 mt-1">Dependencies</p>
     </div>
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+    <div class="bg-gradient-to-br from-white to-red-50 rounded-2xl shadow-sm border border-gray-200/60 p-4 text-center">
         <p class="text-2xl font-bold text-red-600">{{ report.vulnerability_count }}</p>
-        <p class="text-xs text-gray-500">Vulnerabilities</p>
+        <p class="text-xs text-gray-500 mt-1">Vulnerabilities</p>
     </div>
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+    <div class="bg-gradient-to-br from-white to-amber-50 rounded-2xl shadow-sm border border-gray-200/60 p-4 text-center">
         <p class="text-2xl font-bold text-amber-600">{{ report.outdated_count }}</p>
-        <p class="text-xs text-gray-500">Verouderd</p>
+        <p class="text-xs text-gray-500 mt-1">Verouderd</p>
     </div>
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+    <div class="bg-gradient-to-br from-white to-indigo-50 rounded-2xl shadow-sm border border-gray-200/60 p-4 text-center">
         <p class="text-2xl font-bold text-gray-900">{{ report.findings.count }}</p>
-        <p class="text-xs text-gray-500">Findings</p>
+        <p class="text-xs text-gray-500 mt-1">Findings</p>
     </div>
 </div>
 
@@ -54,7 +57,7 @@
     <h2 class="text-lg font-bold text-red-700 mb-3">Kritiek</h2>
     <div class="space-y-3">
         {% for finding in criticals %}
-        <div class="bg-red-50 border border-red-200 rounded-xl p-5">
+        <div class="bg-red-50 border border-red-200 rounded-2xl p-5">
             <div class="flex items-start justify-between cursor-pointer"
                  hx-get="{% url 'dashboard:htmx_finding_detail' finding.pk %}"
                  hx-target="#finding-{{ finding.pk }}"
@@ -83,7 +86,7 @@
     <h2 class="text-lg font-bold text-amber-700 mb-3">Waarschuwingen</h2>
     <div class="space-y-3">
         {% for finding in warnings %}
-        <div class="bg-amber-50 border border-amber-200 rounded-xl p-5">
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5">
             <div class="flex items-start justify-between cursor-pointer"
                  hx-get="{% url 'dashboard:htmx_finding_detail' finding.pk %}"
                  hx-target="#finding-{{ finding.pk }}"
@@ -112,7 +115,7 @@
     <h2 class="text-lg font-bold text-emerald-700 mb-3">Informatie</h2>
     <div class="space-y-3">
         {% for finding in infos %}
-        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
+        <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-5">
             <div class="flex items-start justify-between cursor-pointer"
                  hx-get="{% url 'dashboard:htmx_finding_detail' finding.pk %}"
                  hx-target="#finding-{{ finding.pk }}"
@@ -131,24 +134,30 @@
 {% endif %}
 {% endwith %}
 
-<!-- Tip & Quote -->
+<!-- Tip & Quote with gradient accents -->
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
     {% if report.tip_of_the_week %}
-    <div class="bg-blue-50 border border-blue-200 rounded-xl p-5">
-        <h3 class="font-bold text-blue-800 mb-2">Tip van de week</h3>
-        <p class="text-blue-700 text-sm">{{ report.tip_of_the_week }}</p>
+    <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200/60 rounded-2xl p-6">
+        <div class="flex items-center gap-2 mb-3">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+            <h3 class="font-bold text-blue-800">Tip van de week</h3>
+        </div>
+        <div class="text-blue-700 text-sm prose prose-sm prose-blue max-w-none">{{ report.tip_of_the_week|render_markdown }}</div>
     </div>
     {% endif %}
     {% if report.quote_of_the_week %}
-    <div class="bg-purple-50 border border-purple-200 rounded-xl p-5">
-        <h3 class="font-bold text-purple-800 mb-2">Spreuk van de week</h3>
-        <p class="text-purple-700 text-sm italic">{{ report.quote_of_the_week }}</p>
+    <div class="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200/60 rounded-2xl p-6">
+        <div class="flex items-center gap-2 mb-3">
+            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg>
+            <h3 class="font-bold text-purple-800">Spreuk van de week</h3>
+        </div>
+        <div class="text-purple-700 text-sm italic prose prose-sm prose-purple max-w-none">{{ report.quote_of_the_week|render_markdown }}</div>
     </div>
     {% endif %}
 </div>
 
 <!-- Kosten -->
-<div class="bg-gray-50 border border-gray-200 rounded-xl p-5">
+<div class="bg-gray-50 border border-gray-200/60 rounded-2xl p-5">
     <h3 class="font-bold text-gray-700 mb-2">Kosten dit onderzoek</h3>
     <div class="grid grid-cols-3 gap-4 text-sm">
         <div>

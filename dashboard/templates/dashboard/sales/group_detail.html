@@ -1,0 +1,360 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}{{ group.name }}{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'dashboard:sales_home' %}" class="text-sm text-gray-500 hover:text-indigo-600 transition-colors">&larr; Terug naar Sales</a>
+</div>
+
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900">{{ group.name }}</h1>
+        {% if group.description %}
+        <p class="text-gray-500 mt-1">{{ group.description }}</p>
+        {% endif %}
+    </div>
+    <div class="flex items-center gap-3">
+        <a href="{% url 'dashboard:sales_search' %}?group={{ group.slug }}" class="inline-flex items-center gap-2 px-4 py-2 bg-white text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 shadow-sm transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            Google zoeken
+        </a>
+        <button onclick="document.getElementById('manual-add-form').classList.toggle('hidden')" class="inline-flex items-center gap-2 px-4 py-2 bg-white text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 shadow-sm transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            Handmatig toevoegen
+        </button>
+        <a href="{% url 'dashboard:prospect_group_edit' group.slug %}" class="inline-flex items-center gap-2 px-4 py-2 bg-white text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 shadow-sm transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            Bewerken
+        </a>
+        <form method="post" action="{% url 'dashboard:prospect_group_delete' group.slug %}" data-confirm="Weet je zeker dat je deze groep wilt verwijderen?">
+            {% csrf_token %}
+            <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-white text-sm font-medium text-red-600 rounded-xl border border-red-200 hover:bg-red-50 shadow-sm transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                Verwijderen
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Manual add form (hidden by default) -->
+<div id="manual-add-form" class="hidden mb-6">
+    <div class="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">Handmatig toevoegen</h2>
+            <button onclick="document.getElementById('manual-add-form').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <form hx-post="{% url 'dashboard:htmx_prospect_manual_add' %}"
+              hx-target="#prospect-table-body"
+              hx-swap="afterbegin"
+              hx-on:htmx:after-request="if(event.detail.successful && event.detail.elt === this) { this.reset(); document.getElementById('duplicate-results').innerHTML=''; var es=document.getElementById('empty-state'); if(es) es.remove(); }">
+            {% csrf_token %}
+            <input type="hidden" name="group_slug" value="{{ group.slug }}">
+            <div class="grid sm:grid-cols-2 gap-4">
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Bedrijfsnaam *</label>
+                    <input type="text" name="name" required minlength="2"
+                           hx-post="{% url 'dashboard:htmx_prospect_check_duplicate' %}"
+                           hx-trigger="keyup changed delay:300ms"
+                           hx-target="#duplicate-results"
+                           hx-include="[name='group_slug']"
+                           class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                           placeholder="Bedrijfsnaam" autocomplete="off">
+                    <div id="duplicate-results" class="mt-2"></div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Adres</label>
+                    <input type="text" name="address" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Straat, Stad">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Telefoon</label>
+                    <input type="text" name="phone" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="+31 6...">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Voornaam</label>
+                    <input type="text" name="contact_first_name" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Voornaam">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Achternaam</label>
+                    <input type="text" name="contact_last_name" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Achternaam">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+                    <input type="email" name="email" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="email@voorbeeld.nl">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Aanhef</label>
+                    <select name="aanhef" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <option value="">—</option>
+                        <option value="Geachte heer">Geachte heer</option>
+                        <option value="Geachte mevrouw">Geachte mevrouw</option>
+                        <option value="Beste">Beste</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Website</label>
+                    <input type="text" name="website" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="www.voorbeeld.nl">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notities</label>
+                    <input type="text" name="notes" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optionele notities">
+                </div>
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button type="submit" hx-disabled-elt="this" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                    Toevoegen
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Status filter -->
+<div class="mb-4">
+    <select id="status-filter" onchange="filterProspects(this.value)" class="rounded-xl border-gray-200 text-sm px-4 py-2.5 bg-white shadow-sm border">
+        <option value="">Alle statussen</option>
+        <option value="new">Nieuw</option>
+        <option value="not_contacted">Niet benaderd</option>
+        <option value="contacted">Benaderd</option>
+        <option value="interested">Geïnteresseerd</option>
+        <option value="not_interested">Geen interesse</option>
+        <option value="client">Klant</option>
+    </select>
+</div>
+
+<!-- Bulk action toolbar -->
+<div id="bulk-toolbar" class="hidden mb-4 sticky top-16 z-40">
+    <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex flex-wrap items-center gap-3">
+        <span class="text-sm font-medium text-indigo-700"><span id="bulk-count">0</span> prospects geselecteerd</span>
+        <div class="flex items-center gap-3 ml-auto">
+            <select id="bulk-status" class="rounded-xl border-gray-200 text-sm px-3 py-2 bg-white shadow-sm border">
+                <option value="">Status wijzigen...</option>
+                <option value="new">Nieuw</option>
+                <option value="not_contacted">Niet benaderd</option>
+                <option value="contacted">Benaderd</option>
+                <option value="interested">Geïnteresseerd</option>
+                <option value="not_interested">Geen interesse</option>
+                <option value="client">Klant</option>
+            </select>
+            <select id="bulk-channel" class="rounded-xl border-gray-200 text-sm px-3 py-2 bg-white shadow-sm border">
+                <option value="">Kanaal wijzigen...</option>
+                <option value="linkedin">LinkedIn</option>
+                <option value="phone">Telefoon</option>
+                <option value="email">E-mail</option>
+                <option value="contact_form">Contactformulier</option>
+                <option value="post">Post</option>
+                <option value="visit">Bezoek</option>
+                <option value="paid_ads">Betaalde reclame</option>
+                <option value="other">Anders</option>
+            </select>
+            <select id="bulk-template" class="rounded-xl border-gray-200 text-sm px-3 py-2 bg-white shadow-sm border">
+                <option value="">Template toewijzen...</option>
+                {% for tpl in response_templates %}
+                <option value="{{ tpl.pk }}">{{ tpl.name }}</option>
+                {% endfor %}
+            </select>
+            <button
+                id="bulk-apply-btn"
+                type="button"
+                onclick="applyBulkUpdate()"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                Toepassen
+            </button>
+            <button
+                type="button"
+                onclick="applyBulkEmail()"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 shadow-sm transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                E-mail versturen
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden bulk update form (submitted via htmx) -->
+<form id="bulk-form"
+      hx-post="{% url 'dashboard:htmx_prospect_bulk_update' %}"
+      hx-target="#prospect-table-body"
+      hx-swap="innerHTML"
+      hx-on:htmx:after-request="if(event.detail.successful) { var bs=document.getElementById('bulk-status'); if(bs.tomselect) bs.tomselect.setValue(''); var bc=document.getElementById('bulk-channel'); if(bc.tomselect) bc.tomselect.setValue(''); var bt=document.getElementById('bulk-template'); if(bt.tomselect) bt.tomselect.setValue(''); document.querySelectorAll('.bulk-select-cb').forEach(function(cb){cb.checked=false}); document.getElementById('select-all-cb').checked=false; updateBulkToolbar(); var sf=document.getElementById('status-filter'); if(sf &amp;&amp; sf.value) filterProspects(sf.value); }"
+      style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" name="group_slug" value="{{ group.slug }}">
+    <input type="hidden" id="bulk-hidden-status" name="status" value="">
+    <input type="hidden" id="bulk-hidden-channel" name="contact_channel" value="">
+    <input type="hidden" id="bulk-hidden-template" name="template_id" value="">
+    <div id="bulk-slugs-container"></div>
+</form>
+
+<!-- Hidden bulk email form (regular POST, not HTMX) -->
+<form id="bulk-email-form" method="post" action="{% url 'dashboard:bulk_email_preview' %}" style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" name="group_slug" value="{{ group.slug }}">
+    <input type="hidden" id="bulk-email-hidden-template" name="template_id" value="">
+    <div id="bulk-email-slugs-container"></div>
+</form>
+
+<!-- Prospect table -->
+<div class="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="border-b border-gray-100 bg-gray-50/50">
+                <th class="px-2 py-3 w-10">
+                    <input type="checkbox" id="select-all-cb" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" onchange="toggleSelectAll(this.checked)">
+                </th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Bedrijfsnaam</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden md:table-cell">Contactpersoon</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden md:table-cell">E-mail</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden lg:table-cell">Telefoon</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden lg:table-cell">Website</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Status</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden lg:table-cell">Gemaild op</th>
+            </tr>
+        </thead>
+        <tbody id="prospect-table-body">
+            {% for prospect in prospects %}
+            {% include "dashboard/sales/_prospect_row.html" %}
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if not prospects %}
+    <div id="empty-state" class="p-12 text-center">
+        <p class="text-gray-500">Nog geen prospects in deze groep.</p>
+        <p class="text-sm text-gray-400 mt-2">Gebruik de knoppen hierboven om prospects toe te voegen.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal container -->
+<div id="modal-container"></div>
+
+<script>
+function filterProspects(status) {
+    var rows = document.querySelectorAll('#prospect-table-body tr[data-status]');
+    rows.forEach(function(row) {
+        if (!status || row.dataset.status === status) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function toggleSelectAll(checked) {
+    document.querySelectorAll('.bulk-select-cb').forEach(function(cb) {
+        if (cb.closest('tr').style.display !== 'none') {
+            cb.checked = checked;
+        }
+    });
+    updateBulkToolbar();
+}
+
+function getSelectedSlugs() {
+    var slugs = [];
+    document.querySelectorAll('.bulk-select-cb:checked').forEach(function(cb) {
+        slugs.push(cb.value);
+    });
+    return slugs;
+}
+
+function updateBulkToolbar() {
+    var slugs = getSelectedSlugs();
+    var toolbar = document.getElementById('bulk-toolbar');
+    var counter = document.getElementById('bulk-count');
+    var selectAll = document.getElementById('select-all-cb');
+    var allCbs = document.querySelectorAll('.bulk-select-cb');
+
+    counter.textContent = slugs.length;
+
+    if (slugs.length > 0) {
+        toolbar.classList.remove('hidden');
+    } else {
+        toolbar.classList.add('hidden');
+    }
+
+    // Update select-all state
+    var visibleCbs = Array.from(allCbs).filter(function(cb) { return cb.closest('tr').style.display !== 'none'; });
+    var allChecked = visibleCbs.length > 0 && visibleCbs.every(function(cb) { return cb.checked; });
+    selectAll.checked = allChecked;
+    selectAll.indeterminate = slugs.length > 0 && !allChecked;
+}
+
+function applyBulkUpdate() {
+    var slugs = getSelectedSlugs();
+    var status = document.getElementById('bulk-status').value;
+    var channel = document.getElementById('bulk-channel').value;
+    var template = document.getElementById('bulk-template').value;
+
+    if (slugs.length === 0) return;
+    if (!status && !channel && !template) {
+        showToast({type: 'error', message: 'Selecteer een status, kanaal of template om toe te passen.'});
+        return;
+    }
+
+    // Populate hidden form with selected slugs
+    var container = document.getElementById('bulk-slugs-container');
+    container.innerHTML = '';
+    slugs.forEach(function(s) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'slugs';
+        input.value = s;
+        container.appendChild(input);
+    });
+    document.getElementById('bulk-hidden-status').value = status;
+    document.getElementById('bulk-hidden-channel').value = channel;
+    document.getElementById('bulk-hidden-template').value = template;
+
+    // Trigger htmx submission
+    document.getElementById('bulk-form').requestSubmit();
+}
+
+function applyBulkEmail() {
+    var slugs = getSelectedSlugs();
+    var template = document.getElementById('bulk-template').value;
+
+    if (slugs.length === 0) return;
+    if (!template) {
+        showToast({type: 'error', message: 'Selecteer eerst een template om te versturen.'});
+        return;
+    }
+
+    var container = document.getElementById('bulk-email-slugs-container');
+    container.innerHTML = '';
+    slugs.forEach(function(s) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'slugs';
+        input.value = s;
+        container.appendChild(input);
+    });
+    document.getElementById('bulk-email-hidden-template').value = template;
+    document.getElementById('bulk-email-form').submit();
+}
+
+// Re-attach bulk toolbar state after OOB swaps
+document.body.addEventListener('htmx:afterSettle', function() {
+    updateBulkToolbar();
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        // Prospect detail modal eerst (bovenste laag)
+        var modal = document.getElementById('modal-container');
+        if (modal && modal.innerHTML.trim() !== '') {
+            modal.innerHTML = '';
+            return;
+        }
+        // Handmatig toevoegen panel
+        var form = document.getElementById('manual-add-form');
+        if (form && !form.classList.contains('hidden')) {
+            form.classList.add('hidden');
+        }
+    }
+});
+</script>
+{% endblock %}

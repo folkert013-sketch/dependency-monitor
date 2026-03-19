@@ -1,0 +1,170 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Mijn profiel{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <!-- Account details card -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-6">
+            <div class="flex items-center gap-4">
+                <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-white text-xl font-bold backdrop-blur-sm">
+                    {{ user.first_name|make_list|first|default:user.username|make_list|first|upper }}{{ user.last_name|make_list|first|default:""|upper }}
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white">{{ user.get_full_name|default:user.username }}</h1>
+                    <p class="text-indigo-200 text-sm">@{{ user.username }}</p>
+                </div>
+            </div>
+        </div>
+
+        <form method="post" class="p-8 space-y-5">
+            {% csrf_token %}
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Gebruikersnaam</label>
+                <input type="text" value="{{ user.username }}" disabled
+                       class="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 text-gray-500 text-sm cursor-not-allowed">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label for="id_first_name" class="block text-sm font-medium text-gray-700 mb-1">Voornaam</label>
+                    <input type="text" name="first_name" id="id_first_name" value="{{ user.first_name }}"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm">
+                </div>
+                <div>
+                    <label for="id_last_name" class="block text-sm font-medium text-gray-700 mb-1">Achternaam</label>
+                    <input type="text" name="last_name" id="id_last_name" value="{{ user.last_name }}"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm">
+                </div>
+            </div>
+
+            <div>
+                <label for="id_email" class="block text-sm font-medium text-gray-700 mb-1">E-mailadres</label>
+                <input type="email" name="email" id="id_email" value="{{ user.email }}"
+                       class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                    <span class="block text-xs font-medium text-gray-400 mb-0.5">Laatst ingelogd</span>
+                    <span class="text-sm text-gray-600">{{ user.last_login|date:"d M Y, H:i"|default:"Nooit" }}</span>
+                </div>
+                <div>
+                    <span class="block text-xs font-medium text-gray-400 mb-0.5">Account aangemaakt</span>
+                    <span class="text-sm text-gray-600">{{ user.date_joined|date:"d M Y, H:i" }}</span>
+                </div>
+            </div>
+
+            <div class="pt-2">
+                <button type="submit"
+                        class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2.5 px-6 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md shadow-indigo-200 text-sm">
+                    Opslaan
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Email settings card -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+        <div class="p-8">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                E-mail instellingen
+            </h2>
+            <p class="text-sm text-gray-500 mb-5">Microsoft Graph API instellingen voor het versturen van e-mails.</p>
+
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="email_settings">
+
+                <div>
+                    <label for="id_graph_tenant_id" class="block text-sm font-medium text-gray-700 mb-1">Tenant ID</label>
+                    <input type="text" name="graph_tenant_id" id="id_graph_tenant_id" value="{{ email_settings.graph_tenant_id|default:'' }}"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm"
+                           placeholder="{% if email_settings.graph_tenant_id %}Ingesteld — laat leeg om te behouden{% else %}Azure AD Tenant ID{% endif %}">
+                </div>
+
+                <div>
+                    <label for="id_graph_client_id" class="block text-sm font-medium text-gray-700 mb-1">Client ID</label>
+                    <input type="text" name="graph_client_id" id="id_graph_client_id" value="{{ email_settings.graph_client_id|default:'' }}"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm"
+                           placeholder="{% if email_settings.graph_client_id %}Ingesteld — laat leeg om te behouden{% else %}Azure AD Client ID{% endif %}">
+                </div>
+
+                <div>
+                    <label for="id_graph_client_secret" class="block text-sm font-medium text-gray-700 mb-1">Client Secret</label>
+                    <input type="password" name="graph_client_secret" id="id_graph_client_secret" value=""
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm"
+                           placeholder="{% if email_settings.graph_client_secret %}Ingesteld — laat leeg om te behouden{% else %}Azure AD Client Secret{% endif %}">
+                </div>
+
+                <div>
+                    <label for="id_smtp_user" class="block text-sm font-medium text-gray-700 mb-1">E-mailadres afzender</label>
+                    <input type="email" name="smtp_user" id="id_smtp_user" value="{{ email_settings.smtp_user|default:'' }}"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm"
+                           placeholder="bijv. f.feenstra@fenofin.nl">
+                </div>
+
+                <div>
+                    <label for="id_display_name" class="block text-sm font-medium text-gray-700 mb-1">Weergavenaam (optioneel)</label>
+                    <input type="text" name="display_name" id="id_display_name" value="{{ email_settings.display_name|default:'' }}"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm"
+                           placeholder="bijv. Folkert Feenstra">
+                </div>
+
+                <p class="text-xs text-gray-400">Vereist Azure AD App Registration met <strong>Mail.Send</strong> permission.</p>
+
+                <div class="flex items-center gap-3 pt-2">
+                    <button type="submit"
+                            class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2.5 px-6 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md shadow-indigo-200 text-sm">
+                        Opslaan
+                    </button>
+                    <button type="button"
+                            hx-post="{% url 'htmx_email_test' %}"
+                            hx-swap="none"
+                            class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        Test verbinding
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Security card -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Beveiliging</h2>
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+                <p class="text-sm font-medium text-gray-700">Wachtwoord</p>
+                <p class="text-sm text-gray-500">Wijzig je wachtwoord om je account veilig te houden.</p>
+            </div>
+            <a href="{% url 'password_change' %}"
+               class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                </svg>
+                Wachtwoord wijzigen
+            </a>
+        </div>
+        <div class="border-t border-gray-100 mt-6 pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+                <p class="text-sm font-medium text-gray-700">Sessie</p>
+                <p class="text-sm text-gray-500">Log uit op dit apparaat.</p>
+            </div>
+            <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit"
+                        class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                    </svg>
+                    Uitloggen
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

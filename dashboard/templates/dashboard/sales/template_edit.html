@@ -1,0 +1,107 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}{% if template %}Template bewerken{% else %}Nieuw template{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="mb-8">
+        <a href="{% url 'dashboard:sales_templates' %}" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-indigo-600 transition-colors mb-4">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            Terug naar templates
+        </a>
+        <h1 class="text-3xl font-bold text-gray-900">{% if template %}Template bewerken{% else %}Nieuw template{% endif %}</h1>
+    </div>
+
+    <form method="post" class="bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm space-y-5">
+        {% csrf_token %}
+        <div>
+            <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Naam</label>
+            <input type="text" name="name" id="name" value="{{ template.name|default:'' }}" required
+                   class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div>
+            <label for="category" class="block text-sm font-medium text-gray-700 mb-1">Categorie</label>
+            <select name="category" id="category">
+                <option value="">— Geen categorie —</option>
+                {% for cat in categories %}
+                <option value="{{ cat.pk }}" {% if template and template.category_id == cat.pk %}selected{% endif %}>{{ cat.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="subject" class="block text-sm font-medium text-gray-700 mb-1">Onderwerp</label>
+            <input type="text" name="subject" id="subject" value="{{ template.subject|default:'' }}"
+                   class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                   placeholder="Optioneel e-mail onderwerp">
+        </div>
+        <div>
+            <label for="body" class="block text-sm font-medium text-gray-700 mb-1">Bericht (platte tekst)</label>
+            <textarea name="body" id="body" rows="20" required
+                      class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">{{ template.body|default:'' }}</textarea>
+            <p class="mt-2 text-xs text-gray-400">Beschikbare variabelen: <code class="bg-gray-100 px-1.5 py-0.5 rounded text-indigo-600">{aanhef}</code> <code class="bg-gray-100 px-1.5 py-0.5 rounded text-indigo-600">{voornaam}</code> <code class="bg-gray-100 px-1.5 py-0.5 rounded text-indigo-600">{achternaam}</code> <code class="bg-gray-100 px-1.5 py-0.5 rounded text-indigo-600">{bedrijfsnaam}</code></p>
+        </div>
+
+        <!-- HTML Template (collapsible) -->
+        <details{% if template and template.html_template %} open{% endif %}>
+            <summary class="cursor-pointer text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors inline-flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                HTML Template (optioneel)
+            </summary>
+            <div class="mt-3 space-y-3">
+                <textarea name="html_template" id="html_template" rows="20"
+                          class="w-full rounded-xl border-gray-300 text-xs px-4 py-3 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono bg-gray-50"
+                          placeholder="Plak hier de HTML e-mail template...">{{ template.html_template|default:'' }}</textarea>
+                <p class="text-xs text-gray-400">Indien ingevuld wordt deze HTML als e-mail body verzonden. Dezelfde variabelen als hierboven zijn beschikbaar.</p>
+                {% if template and template.slug %}
+                <button type="button" onclick="openHtmlPreview()"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    Preview bekijken
+                </button>
+                {% endif %}
+            </div>
+        </details>
+
+        <div class="flex justify-end gap-3 pt-2">
+            <a href="{% url 'dashboard:sales_templates' %}" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">Annuleren</a>
+            <button type="submit" class="px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-xl hover:from-indigo-700 hover:to-indigo-800 shadow-lg shadow-indigo-200 transition-all">Opslaan</button>
+        </div>
+    </form>
+</div>
+
+{% if template and template.slug %}
+<!-- Preview Modal -->
+<div id="html-preview-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeHtmlPreview()"></div>
+    <div class="relative w-full max-w-3xl mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden" style="height:85vh;">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                <h3 class="font-semibold text-gray-900">HTML Preview</h3>
+            </div>
+            <button onclick="closeHtmlPreview()" class="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <iframe id="html-preview-iframe" class="w-full border-0" style="height:calc(85vh - 65px);" sandbox="allow-same-origin"></iframe>
+    </div>
+</div>
+
+<script>
+function openHtmlPreview() {
+    var modal = document.getElementById('html-preview-modal');
+    var iframe = document.getElementById('html-preview-iframe');
+    iframe.src = "{% url 'dashboard:response_template_preview' template.slug %}";
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+function closeHtmlPreview() {
+    var modal = document.getElementById('html-preview-modal');
+    var iframe = document.getElementById('html-preview-iframe');
+    iframe.src = '';
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+</script>
+{% endif %}
+{% endblock %}

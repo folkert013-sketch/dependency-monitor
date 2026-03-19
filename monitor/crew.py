@@ -16,18 +16,34 @@ from .tools import (
 
 CONFIG_DIR = Path(__file__).parent / "config"
 
+# Ordered list of agent roles matching the sequential task execution order
+AGENT_SEQUENCE = [
+    "Dependency Scanner",
+    "API Deprecation Monitor",
+    "Security Vulnerability Checker",
+    "Breaking Change Analyzer",
+    "Action Report Writer",
+]
+
 
 def _load_yaml(filename: str) -> dict:
     return yaml.safe_load((CONFIG_DIR / filename).read_text(encoding="utf-8"))
 
 
-def create_crew(requirements_path: str) -> Crew:
-    """Create and return the dependency monitor crew."""
+def create_crew(requirements_path: str, step_callback=None, task_callback=None) -> tuple[Crew, list[Agent]]:
+    """Create and return the dependency monitor crew and its agents."""
     agents_config = _load_yaml("agents.yaml")
     tasks_config = _load_yaml("tasks.yaml")
 
-    llm = LLM(
-        model="gemini/gemini-2.5-pro",
+    # Hoofd-agent: pro model voor rapportage en synthese
+    manager_llm = LLM(
+        model="gemini/gemini-3.1-pro-preview",
+        api_key=os.environ.get("GEMINI_API_KEY", ""),
+    )
+
+    # Taak-agents: flash model voor snelle uitvoering
+    task_llm = LLM(
+        model="gemini/gemini-3-flash-preview",
         api_key=os.environ.get("GEMINI_API_KEY", ""),
     )
 
@@ -41,35 +57,39 @@ def create_crew(requirements_path: str) -> Crew:
     changelog_tool = GitHubChangelogTool()
     email_tool = EmailSenderTool()
 
-    # --- Agents ---
+    # --- Agents (flash voor taken, pro voor rapportage) ---
     dependency_scanner = Agent(
         **agents_config["dependency_scanner"],
         tools=[requirements_tool, pypi_tool],
-        llm=llm,
+        llm=task_llm,
+        max_iter=80,  # Needs ~2 calls per package (read + check) for ~35 packages
     )
 
     api_monitor = Agent(
         **agents_config["api_deprecation_monitor"],
         tools=[api_status_tool],
-        llm=llm,
+        llm=task_llm,
+        max_iter=40,  # ~14 APIs to check
     )
 
     security_checker = Agent(
         **agents_config["security_checker"],
         tools=[vuln_tool],
-        llm=llm,
+        llm=task_llm,
+        max_iter=50,  # 1 call per package with vulnerabilities
     )
 
     breaking_analyzer = Agent(
         **agents_config["breaking_change_analyzer"],
         tools=[changelog_tool],
-        llm=llm,
+        llm=task_llm,
+        max_iter=40,  # Only checks outdated packages
     )
 
     report_writer = Agent(
         **agents_config["action_report_writer"],
         tools=[email_tool],
-        llm=llm,
+        llm=manager_llm,
     )
 
     # --- Tasks ---
@@ -106,11 +126,18 @@ def create_crew(requirements_path: str) -> Crew:
     )
 
     # --- Crew ---
-    crew = Crew(
+    crew_kwargs = dict(
         agents=[dependency_scanner, api_monitor, security_checker, breaking_analyzer, report_writer],
         tasks=[scan_task, api_task, vuln_task, breaking_task, report_task],
         process=Process.sequential,
         verbose=True,
     )
+    if step_callback:
+        crew_kwargs["step_callback"] = step_callback
+    if task_callback:
+        crew_kwargs["task_callback"] = task_callback
 
-    return crew
+    crew = Crew(**crew_kwargs)
+    agents = [dependency_scanner, api_monitor, security_checker, breaking_analyzer, report_writer]
+
+    return crew, agents

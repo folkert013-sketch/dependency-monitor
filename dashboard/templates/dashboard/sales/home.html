@@ -1,0 +1,74 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Sales{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900">Sales</h1>
+        <p class="text-gray-500 mt-1">Prospect groepen en outreach overzicht</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <a href="{% url 'dashboard:sales_search' %}" class="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 shadow-sm transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            Bedrijven zoeken
+        </a>
+        <a href="{% url 'dashboard:business_types_manage' %}" class="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 shadow-sm transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            Bedrijfstypes
+        </a>
+        <a href="{% url 'dashboard:prospect_group_create' %}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold rounded-xl hover:from-emerald-700 hover:to-emerald-800 transition-all shadow-lg shadow-emerald-200 hover:shadow-xl">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            Nieuwe groep
+        </a>
+    </div>
+</div>
+
+<!-- KPI's -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <p class="text-sm text-gray-500">Totaal prospects</p>
+        <p class="text-3xl font-bold text-gray-900 mt-1">{{ total_prospects }}</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <p class="text-sm text-gray-500">Benaderd</p>
+        <p class="text-3xl font-bold text-indigo-600 mt-1">{{ contacted_count }}</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <p class="text-sm text-gray-500">Geïnteresseerd</p>
+        <p class="text-3xl font-bold text-emerald-600 mt-1">{{ interested_count }}</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <p class="text-sm text-gray-500">Klanten</p>
+        <p class="text-3xl font-bold text-purple-600 mt-1">{{ client_count }}</p>
+    </div>
+</div>
+
+<!-- Groups -->
+<h2 class="text-lg font-semibold text-gray-900 mb-4">Groepen</h2>
+{% if groups %}
+<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for group in groups %}
+    <a href="{% url 'dashboard:prospect_group_detail' group.slug %}" class="group block bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm hover:shadow-lg hover:border-emerald-200 transition-all">
+        <h3 class="text-lg font-semibold text-gray-900 group-hover:text-emerald-700 transition-colors">{{ group.name }}</h3>
+        {% if group.description %}
+        <p class="text-sm text-gray-500 mt-1 line-clamp-2">{{ group.description }}</p>
+        {% endif %}
+        <div class="flex items-center gap-4 mt-4 text-xs text-gray-400">
+            <span class="inline-flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                {{ group.prospect_count }} prospect{{ group.prospect_count|pluralize:"en" }}
+            </span>
+            <span>{{ group.created_at|date:"d M Y" }}</span>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="bg-white rounded-2xl border border-gray-200/60 p-12 text-center shadow-sm">
+    <svg class="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    <p class="text-gray-500">Nog geen groepen aangemaakt.</p>
+    <p class="text-sm text-gray-400 mt-1">Maak een groep aan en zoek bedrijven om toe te voegen.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,122 @@
+# Fiscale bronnen en deadlines configuratie
+# Bijgewerkt: 2026-02
+
+sources:
+  - name: "Belastingdienst"
+    url: "https://www.belastingdienst.nl"
+    categories:
+      - btw
+      - ib
+      - vpb
+      - loonbelasting
+  - name: "Rijksoverheid Belastingen"
+    url: "https://www.rijksoverheid.nl/onderwerpen/belasting-betalen"
+    categories:
+      - btw
+      - ib
+      - vpb
+      - algemeen
+  - name: "KvK Ondernemersplein"
+    url: "https://ondernemersplein.kvk.nl"
+    categories:
+      - subsidies
+      - algemeen
+  - name: "Ondernemersplein"
+    url: "https://www.ondernemersplein.nl"
+    categories:
+      - btw
+      - ib
+      - vpb
+      - subsidies
+      - algemeen
+  - name: "RVO (Rijksdienst voor Ondernemend Nederland)"
+    url: "https://www.rvo.nl"
+    categories:
+      - subsidies
+      - algemeen
+  - name: "UWV"
+    url: "https://www.uwv.nl"
+    categories:
+      - loonbelasting
+      - algemeen
+  - name: "Overheid.nl Wettenbank"
+    url: "https://wetten.overheid.nl"
+    categories:
+      - btw
+      - ib
+      - vpb
+      - loonbelasting
+      - algemeen
+  - name: "SVB"
+    url: "https://www.svb.nl"
+    categories:
+      - algemeen
+  - name: "Rijksoverheid Prinsjesdag"
+    url: "https://www.rijksoverheid.nl/onderwerpen/prinsjesdag"
+    categories:
+      - algemeen
+
+deadlines:
+  # BTW deadlines 2026
+  - date: "2026-01-31"
+    description: "BTW-aangifte Q4 2025 indienen en betalen"
+    category: "btw"
+  - date: "2026-03-31"
+    description: "BTW-aangifte Q1 2026 indienen en betalen (kwartaal)"
+    category: "btw"
+  - date: "2026-04-30"
+    description: "BTW-aangifte Q1 2026 indienen en betalen"
+    category: "btw"
+  - date: "2026-06-30"
+    description: "BTW-aangifte Q2 2026 indienen en betalen (kwartaal)"
+    category: "btw"
+  - date: "2026-07-31"
+    description: "BTW-aangifte Q2 2026 indienen en betalen"
+    category: "btw"
+  - date: "2026-09-30"
+    description: "BTW-aangifte Q3 2026 indienen en betalen (kwartaal)"
+    category: "btw"
+  - date: "2026-10-31"
+    description: "BTW-aangifte Q3 2026 indienen en betalen"
+    category: "btw"
+
+  # Inkomstenbelasting deadlines 2026
+  - date: "2026-03-01"
+    description: "Start aangifteperiode inkomstenbelasting 2025"
+    category: "ib"
+  - date: "2026-05-01"
+    description: "Deadline aangifte inkomstenbelasting 2025"
+    category: "ib"
+
+  # Vennootschapsbelasting deadlines 2026
+  - date: "2026-06-01"
+    description: "Deadline aangifte vennootschapsbelasting 2025"
+    category: "vpb"
+  - date: "2026-05-31"
+    description: "Eerste voorlopige aanslag VPB 2026"
+    category: "vpb"
+
+  # Loonbelasting deadlines 2026
+  - date: "2026-01-31"
+    description: "Loonaangifte december 2025 indienen"
+    category: "loonbelasting"
+  - date: "2026-02-28"
+    description: "Loonaangifte januari 2026 indienen"
+    category: "loonbelasting"
+  - date: "2026-03-31"
+    description: "Loonaangifte februari 2026 indienen en jaaropgave verstrekken"
+    category: "loonbelasting"
+
+  # Subsidie deadlines 2026
+  - date: "2026-03-31"
+    description: "WBSO aanvraag Q2 2026 (S&O-afdrachtvermindering)"
+    category: "subsidies"
+  - date: "2026-06-30"
+    description: "WBSO aanvraag Q3 2026"
+    category: "subsidies"
+  - date: "2026-09-30"
+    description: "WBSO aanvraag Q4 2026"
+    category: "subsidies"
+  - date: "2026-09-15"
+    description: "Prinsjesdag 2026 — Belastingplan 2027"
+    category: "algemeen"

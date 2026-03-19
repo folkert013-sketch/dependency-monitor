@@ -1,0 +1,103 @@
+{
+  "name": "WWFT Compliance",
+  "slug": "wwft-compliance",
+  "description": "Screent personen en entiteiten op PEP-status, sanctielijsten en adverse media, en monitort actuele WWFT wet- en regelgeving.",
+  "process": "sequential",
+  "verbose": true,
+  "variables": [
+    {
+      "name": "entity_name",
+      "label": "Naam persoon of organisatie",
+      "description": "De naam van de persoon of organisatie die gescreend moet worden.",
+      "input_type": "text",
+      "default_value": "",
+      "required": true,
+      "order": 0
+    },
+    {
+      "name": "section_key",
+      "label": "Compliance sectie (optioneel)",
+      "description": "Specifieke sectie-sleutel om te controleren (bijv. pep_sancties, meldplicht). Laat leeg voor volledige scan.",
+      "input_type": "text",
+      "default_value": "",
+      "required": false,
+      "order": 1
+    }
+  ],
+  "agents": [
+    {
+      "order": 0,
+      "role": "PEP & Sanctie Screener",
+      "goal": "Screen de opgegeven persoon of entiteit '{entity_name}' tegen publieke PEP-registers en sanctielijsten. Controleer Tweede Kamer, Eerste Kamer, Rijksoverheid, Europees Parlement voor PEP-status. Controleer EU, NL en VN sanctielijsten voor sanctievermeldingen. Rapporteer alle gevonden vermeldingen met bronvermelding.",
+      "backstory": "Je bent een compliance specialist gespecialiseerd in PEP-screening en sanctiecontroles volgens de Wwft. Je kent alle relevante Nederlandse en Europese registers en weet precies hoe je een grondige screening uitvoert. Je mist nooit een vermelding en rapporteert altijd met bronvermelding.",
+      "llm_provider": "gemini",
+      "llm_model": "gemini-3-flash-preview",
+      "tools": ["pep_screener", "sanctions_checker"],
+      "max_iter": 40,
+      "verbose": true
+    },
+    {
+      "order": 1,
+      "role": "Adverse Media Analist",
+      "goal": "Doorzoek Nederlandse nieuwsbronnen op negatieve berichtgeving over '{entity_name}'. Focus op berichten gerelateerd aan fraude, witwassen, sancties, corruptie, belastingontduiking en andere financiële misdrijven. Rapporteer alle gevonden berichten met datum, bron en relevantie-inschatting.",
+      "backstory": "Je bent een onderzoeksjournalist met expertise in financieel-economische criminaliteit. Je kent alle Nederlandse nieuwsbronnen en juridische databases. Je kunt snel inschatten of berichtgeving relevant is voor een WWFT-beoordeling en onderscheidt ruis van echte risicosignalen.",
+      "llm_provider": "gemini",
+      "llm_model": "gemini-3-flash-preview",
+      "tools": ["adverse_media_searcher", "article_content_extractor"],
+      "max_iter": 40,
+      "verbose": true
+    },
+    {
+      "order": 2,
+      "role": "WWFT Wetgevingsmonitor",
+      "goal": "Controleer de actuele stand van WWFT wet- en regelgeving. Zoek naar recente wijzigingen in de Wwft, het Uitvoeringsbesluit Wwft, BFT-richtlijnen en FIU-publicaties. Rapporteer relevante wijzigingen die impact hebben op de compliance-verplichtingen van het kantoor.",
+      "backstory": "Je bent een juridisch specialist op het gebied van anti-witwasregelgeving. Je volgt dagelijks de ontwikkelingen rondom de Wwft, het UBO-register, de AMLD-richtlijnen en toezichthouders zoals BFT en DNB. Je vertaalt complexe wetgeving naar begrijpelijke actiepunten.",
+      "llm_provider": "gemini",
+      "llm_model": "gemini-3-flash-preview",
+      "tools": ["wwft_legislation_fetcher", "gov_site_fetcher", "tax_news_searcher"],
+      "max_iter": 50,
+      "verbose": true
+    },
+    {
+      "order": 3,
+      "role": "Compliance Rapporteur",
+      "goal": "Compileer alle bevindingen van de andere agents tot een compleet WWFT compliance rapport over '{entity_name}'. Structureer het rapport met: 1) PEP-screening resultaten, 2) Sanctielijst controle, 3) Adverse media bevindingen, 4) Actuele wetgeving updates, 5) Risico-inschatting (laag/midden/hoog), 6) Aanbevolen vervolgacties. Schrijf in het Nederlands.",
+      "backstory": "Je bent een senior compliance officer met jarenlange ervaring in het schrijven van WWFT-rapportages. Je weet precies welke informatie een toezichthouder verwacht en hoe je bevindingen helder en compleet rapporteert. Je rapporten voldoen altijd aan de eisen van het BFT.",
+      "llm_provider": "gemini",
+      "llm_model": "gemini-3.1-pro-preview",
+      "tools": ["email_sender"],
+      "max_iter": 25,
+      "verbose": true
+    }
+  ],
+  "tasks": [
+    {
+      "order": 0,
+      "description": "Voer een PEP-screening en sanctiecontrole uit voor '{entity_name}'.\n\n1. Controleer PEP-registers: Tweede Kamer, Eerste Kamer, Rijksoverheid, Europees Parlement\n2. Controleer sanctielijsten: EU Consolidated Sanctions, NL Nationaal Sanctieoverzicht, VN Sanctielijst\n3. Documenteer alle gevonden vermeldingen met exacte bron-URL\n4. Geef een duidelijk oordeel: WEL/GEEN PEP-status, WEL/GEEN sanctievermelding",
+      "expected_output": "Een gestructureerd rapport met PEP-screening resultaten en sanctiecontrole resultaten voor de opgegeven entiteit, inclusief bronvermeldingen en een duidelijk oordeel per register.",
+      "agent_order": 0,
+      "context_task_orders": []
+    },
+    {
+      "order": 1,
+      "description": "Doorzoek Nederlandse nieuwsbronnen op adverse media over '{entity_name}'.\n\n1. Zoek op NU.nl, NOS, Rechtspraak.nl en Het Financieele Dagblad\n2. Focus op berichten over fraude, witwassen, sancties, corruptie, belastingontduiking\n3. Haal de inhoud op van gevonden relevante artikelen\n4. Beoordeel de relevantie en betrouwbaarheid van elke bron",
+      "expected_output": "Een overzicht van gevonden nieuwsberichten met titel, bron, datum indien beschikbaar, samenvatting en relevantie-inschatting (hoog/midden/laag) voor WWFT-beoordeling.",
+      "agent_order": 1,
+      "context_task_orders": []
+    },
+    {
+      "order": 2,
+      "description": "Controleer de actuele stand van WWFT wet- en regelgeving.\n\n1. Zoek recente wijzigingen in de Wwft op wetten.overheid.nl\n2. Check BFT-publicaties en richtlijnen\n3. Check FIU-Nederland voor nieuwe typologieën en leidraden\n4. Check DNB voor toezichthouder-updates\n5. Rapporteer wijzigingen die impact hebben op compliance-verplichtingen",
+      "expected_output": "Een overzicht van recente en aankomende wijzigingen in WWFT-gerelateerde wet- en regelgeving, met per wijziging: beschrijving, bron-URL, ingangsdatum indien bekend, en impact op kantoorprocedures.",
+      "agent_order": 2,
+      "context_task_orders": []
+    },
+    {
+      "order": 3,
+      "description": "Compileer alle bevindingen tot een compleet WWFT compliance rapport over '{entity_name}'. Schrijf in het Nederlands.\n\nHet rapport MOET bevatten:\n1. Samenvatting met risico-inschatting (LAAG / MIDDEN / HOOG)\n2. PEP-screening resultaten\n3. Sanctielijst controle resultaten\n4. Adverse media bevindingen\n5. Relevante wetgeving updates\n6. Aanbevolen vervolgacties voor het kantoor\n7. Bronvermelding",
+      "expected_output": "Een compleet, professioneel WWFT compliance rapport in het Nederlands met alle vereiste secties, risico-inschatting en concrete vervolgacties.",
+      "agent_order": 3,
+      "context_task_orders": [0, 1, 2]
+    }
+  ]
+}

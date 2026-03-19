@@ -1,0 +1,111 @@
+tax_rates:
+  btw:
+    label: "BTW-tarieven"
+    items:
+      - name: "Standaard BTW-tarief"
+        "2025": "21%"
+        "2026": "21%"
+      - name: "Verlaagd BTW-tarief"
+        "2025": "9%"
+        "2026": "9%"
+      - name: "BTW-tarief op boeken/tijdschriften"
+        "2025": "9%"
+        "2026": "9%"
+
+  ib:
+    label: "Inkomstenbelasting (Box 1)"
+    items:
+      - name: "Schijf 1 (t/m €38.441)"
+        "2025": "35,82%"
+        "2026": "35,82%"
+        note: "incl. premie volksverzekeringen"
+      - name: "Schijf 2 (vanaf €38.441 t/m €76.817)"
+        "2025": "37,48%"
+        "2026": "37,48%"
+      - name: "Schijf 3 (vanaf €76.817)"
+        "2025": "49,50%"
+        "2026": "49,50%"
+      - name: "AOW-leeftijd schijf 1 (t/m €40.502)"
+        "2025": "17,92%"
+        "2026": "17,92%"
+      - name: "AOW-leeftijd schijf 2 (vanaf €40.502 t/m €76.817)"
+        "2025": "37,48%"
+        "2026": "37,48%"
+
+  vpb:
+    label: "Vennootschapsbelasting"
+    items:
+      - name: "Tarief t/m €200.000"
+        "2025": "19%"
+        "2026": "19%"
+      - name: "Tarief boven €200.000"
+        "2025": "25,8%"
+        "2026": "25,8%"
+
+  zelfstandigenaftrek:
+    label: "Zelfstandigenaftrek & ondernemersregelingen"
+    items:
+      - name: "Zelfstandigenaftrek"
+        "2025": "€2.470"
+        "2026": "€2.470"
+        note: "Afbouw gestopt per 2025"
+      - name: "Startersaftrek"
+        "2025": "€2.123"
+        "2026": "€2.123"
+      - name: "MKB-winstvrijstelling"
+        "2025": "13,31%"
+        "2026": "13,31%"
+      - name: "KOR drempel (Kleine Ondernemersregeling)"
+        "2025": "€20.000"
+        "2026": "€20.000"
+
+  arbeidskorting:
+    label: "Arbeidskorting"
+    items:
+      - name: "Maximum arbeidskorting"
+        "2025": "€5.599"
+        "2026": "€5.599"
+      - name: "Afbouwpunt arbeidskorting"
+        "2025": "€39.958"
+        "2026": "€39.958"
+      - name: "Algemene heffingskorting (max)"
+        "2025": "€3.362"
+        "2026": "€3.362"
+
+  box3:
+    label: "Box 3 — Vermogensbelasting"
+    items:
+      - name: "Heffingsvrij vermogen"
+        "2025": "€57.000"
+        "2026": "€57.000"
+        note: "Per persoon"
+      - name: "Tarief box 3"
+        "2025": "36%"
+        "2026": "36%"
+      - name: "Forfaitair rendement spaargeld"
+        "2025": "variabel"
+        "2026": "variabel"
+        note: "Gebaseerd op werkelijk spaarrente"
+      - name: "Forfaitair rendement beleggingen"
+        "2025": "6,04%"
+        "2026": "wordt vastgesteld"
+
+  loonbelasting:
+    label: "Loonbelasting & werkgeverslasten"
+    items:
+      - name: "WW-premie laag (vaste contracten)"
+        "2025": "2,64%"
+        "2026": "2,64%"
+      - name: "WW-premie hoog (flex contracten)"
+        "2025": "7,64%"
+        "2026": "7,64%"
+      - name: "Werkkostenregeling vrije ruimte (t/m €400.000)"
+        "2025": "1,92%"
+        "2026": "1,92%"
+      - name: "Werkkostenregeling vrije ruimte (boven €400.000)"
+        "2025": "1,18%"
+        "2026": "1,18%"
+      - name: "30%-regeling (expats)"
+        "2025": "30%/20%/10%"
+        "2026": "30%/20%/10%"
+        note: "Afbouw over 5 jaar"

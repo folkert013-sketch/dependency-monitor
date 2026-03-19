@@ -1,0 +1,84 @@
+{
+  "name": "Bedrijfsmonitor",
+  "slug": "bedrijfsmonitor",
+  "description": "Onderzoekt Nederlandse fiscale ontwikkelingen en schrijft blog-artikelen voor MKB-ondernemers.",
+  "process": "sequential",
+  "verbose": true,
+  "variables": [],
+  "agents": [
+    {
+      "order": 0,
+      "role": "Fiscaal Onderzoeker",
+      "goal": "Doorzoek Nederlandse overheidsbronnen (belastingdienst.nl, rijksoverheid.nl, kvk.nl) op recente fiscale ontwikkelingen, wetswijzigingen en nieuws dat relevant is voor het MKB. Focus op BTW, inkomstenbelasting, vennootschapsbelasting, loonbelasting, subsidies en aankomende deadlines.",
+      "backstory": "Je bent een ervaren fiscaal onderzoeker die dagelijks de Nederlandse overheidswebsites monitort op veranderingen in belastingwetgeving. Je kent alle relevante bronnen en weet precies waar je moet zoeken voor de meest actuele informatie.",
+      "llm_provider": "gemini",
+      "llm_model": "gemini-3-flash-preview",
+      "tools": ["gov_site_fetcher", "tax_news_searcher", "deadline_checker"],
+      "max_iter": 50,
+      "verbose": true
+    },
+    {
+      "order": 1,
+      "role": "Trend Analist",
+      "goal": "Analyseer de gevonden fiscale ontwikkelingen op urgentie en impact voor het MKB. Selecteer de 2-4 meest relevante onderwerpen en maak een schrijfbriefing per onderwerp met context, kernpunten en doelgroep.",
+      "backstory": "Je bent een strategisch analist met expertise in Nederlandse belastingwetgeving en MKB-beleid. Je kunt snel inschatten welke ontwikkelingen de grootste impact hebben op ondernemers en welke onderwerpen prioriteit verdienen.",
+      "llm_provider": "gemini",
+      "llm_model": "gemini-3-flash-preview",
+      "tools": [],
+      "max_iter": 25,
+      "verbose": true
+    },
+    {
+      "order": 2,
+      "role": "Blog Schrijver",
+      "goal": "Schrijf professionele, goed leesbare blog-artikelen over fiscale onderwerpen voor MKB-ondernemers. Elk artikel heeft een pakkende titel, een korte intro (2-3 zinnen), en een uitgebreide body in markdown. Schrijf in het Nederlands, begrijpelijk maar inhoudelijk correct. Vermeld altijd de bronnen.",
+      "backstory": "Je bent een ervaren financieel journalist die complexe fiscale onderwerpen vertaalt naar begrijpelijke artikelen voor ondernemers. Je schrijft helder, concreet en actiegericht. Je vermijdt jargon maar bent inhoudelijk correct.",
+      "llm_provider": "gemini",
+      "llm_model": "gemini-3-flash-preview",
+      "tools": [],
+      "max_iter": 25,
+      "verbose": true
+    },
+    {
+      "order": 3,
+      "role": "Kwaliteitsreviewer",
+      "goal": "Review elk artikel op feitelijke correctheid, bronvermelding, leesbaarheid en relevantie. Geef een kwaliteitsscore van 1-10. Controleer of bronnen kloppen en of de informatie actueel is. Lever het eindresultaat als JSON array.",
+      "backstory": "Je bent een senior redacteur met een achtergrond in fiscaal recht. Je controleert artikelen op fouten, onvolledigheden en misleidende informatie. Je bent streng maar eerlijk in je beoordeling en zorgt ervoor dat alleen kwalitatieve content wordt gepubliceerd.",
+      "llm_provider": "gemini",
+      "llm_model": "gemini-3.1-pro-preview",
+      "tools": ["gov_site_fetcher"],
+      "max_iter": 30,
+      "verbose": true
+    }
+  ],
+  "tasks": [
+    {
+      "order": 0,
+      "description": "Doorzoek de volgende Nederlandse overheidsbronnen op recente fiscale ontwikkelingen die relevant zijn voor het MKB:\n- belastingdienst.nl (BTW, IB, VPB, loonbelasting)\n- rijksoverheid.nl (belastingplan, wetswijzigingen)\n- kvk.nl / ondernemersplein.kvk.nl (MKB subsidies, regelingen)\n\nGebruik de Tax News Searcher, Fiscal Deadline Checker en Government Site Fetcher tools.",
+      "expected_output": "Een gestructureerd overzicht van 5-10 gevonden fiscale ontwikkelingen, elk met: titel/onderwerp, samenvatting, categorie, bron-URL en relevantie voor MKB.",
+      "agent_order": 0,
+      "context_task_orders": []
+    },
+    {
+      "order": 1,
+      "description": "Analyseer de gevonden fiscale ontwikkelingen en bepaal welke onderwerpen het meest relevant en urgent zijn voor MKB-ondernemers. Selecteer 2-4 onderwerpen voor blog-artikelen op basis van urgentie, impact, actualiteit en actiegerichtheid.",
+      "expected_output": "2-4 gedetailleerde schrijfbriefings, elk met voorgestelde titel, kernpunten, doelgroep, categorie en bronnen.",
+      "agent_order": 1,
+      "context_task_orders": [0]
+    },
+    {
+      "order": 2,
+      "description": "Schrijf op basis van de schrijfbriefings 2-4 professionele blog-artikelen in het Nederlands voor MKB-ondernemers. Elk artikel bevat title, intro, body (markdown), category en sources.",
+      "expected_output": "2-4 complete artikelen, elk met title, intro, body (markdown), category en sources.",
+      "agent_order": 2,
+      "context_task_orders": [0, 1]
+    },
+    {
+      "order": 3,
+      "description": "Review elk geschreven artikel op feitelijke correctheid, bronvermelding, leesbaarheid en compleetheid. Geef een quality_score van 1-10.\n\nLever het eindresultaat als een geldige JSON array met het format:\n[{\"title\": \"...\", \"intro\": \"...\", \"body\": \"...\", \"category\": \"...\", \"sources\": [\"...\"], \"quality_score\": 8}]",
+      "expected_output": "Een geldige JSON array met 2-4 artikel-objecten, elk met title, intro, body, category, sources en quality_score.",
+      "agent_order": 3,
+      "context_task_orders": [2]
+    }
+  ]
+}

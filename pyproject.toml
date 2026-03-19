@@ -7,7 +7,7 @@ dependencies = [
     "django>=5.2",
     "django-htmx",
     "django-environ",
-    "crewai[tools]>=0.86.0",
+    "crewai[tools,google-genai]>=0.86.0",
     "requests>=2.31.0",
     "packaging>=24.0",
     "pydantic>=2.10",
@@ -15,8 +15,14 @@ dependencies = [
     "jinja2>=3.1.0",
     "beautifulsoup4>=4.12.0",
     "markdown2>=2.5.0",
+    "bleach>=6.0.0",
+    "django-ratelimit>=4.1.0",
+    "msal>=1.28.0",
 ]
 
 [build-system]
 requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["monitor*", "dashboard*", "config*"]

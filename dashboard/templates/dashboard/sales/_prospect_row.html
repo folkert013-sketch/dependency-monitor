@@ -1,0 +1,54 @@
+<tr id="prospect-row-{{ prospect.slug }}"
+    data-status="{{ prospect.status }}"
+    hx-get="{% url 'dashboard:htmx_prospect_popup' prospect.slug %}"
+    hx-target="#modal-container"
+    hx-swap="innerHTML"
+    {% if oob_swap %}hx-swap-oob="afterbegin:#prospect-table-body"{% endif %}
+    class="border-b border-gray-50 hover:bg-indigo-50/30 cursor-pointer transition-colors">
+    <td class="px-2 py-3 w-10" onclick="event.stopPropagation()">
+        <input type="checkbox" class="bulk-select-cb rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" value="{{ prospect.slug }}" onchange="updateBulkToolbar()">
+    </td>
+    <td class="px-5 py-3">
+        <div class="font-medium text-gray-900">{{ prospect.name }}</div>
+    </td>
+    <td class="px-5 py-3 text-gray-500 hidden md:table-cell">
+        {% if prospect.contact_first_name or prospect.contact_last_name %}
+        {{ prospect.contact_first_name }} {{ prospect.contact_last_name }}
+        {% else %}—{% endif %}
+    </td>
+    <td class="px-5 py-3 text-gray-500 hidden md:table-cell">
+        {% if prospect.email %}
+        <span class="truncate block max-w-[200px]" title="{{ prospect.email }}">{{ prospect.email }}</span>
+        {% else %}—{% endif %}
+    </td>
+    <td class="px-5 py-3 text-gray-500 hidden lg:table-cell">
+        {% if prospect.phone %}{{ prospect.phone }}{% else %}—{% endif %}
+    </td>
+    <td class="px-5 py-3 text-gray-500 hidden lg:table-cell" onclick="event.stopPropagation()">
+        {% if prospect.website %}
+        <a href="{{ prospect.website }}" target="_blank" class="text-indigo-600 hover:text-indigo-800 hover:underline truncate block max-w-[180px]" title="{{ prospect.website }}">{{ prospect.website }}</a>
+        {% else %}—{% endif %}
+    </td>
+    <td class="px-5 py-3">
+        {% if prospect.status == "new" %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Nieuw</span>
+        {% elif prospect.status == "not_contacted" %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">Niet benaderd</span>
+        {% elif prospect.status == "contacted" %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Benaderd</span>
+        {% elif prospect.status == "interested" %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Geïnteresseerd</span>
+        {% elif prospect.status == "not_interested" %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Geen interesse</span>
+        {% elif prospect.status == "client" %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">Klant</span>
+        {% endif %}
+    </td>
+    <td class="px-5 py-3 text-gray-500 hidden lg:table-cell">
+        {% with last_response=prospect.responses.all.0 %}
+        {% if last_response and last_response.sent_at %}
+        <span class="text-xs" title="{{ last_response.sent_at|date:'d M Y H:i' }}">{{ last_response.sent_at|date:"d M Y" }}</span>
+        {% else %}—{% endif %}
+        {% endwith %}
+    </td>
+</tr>

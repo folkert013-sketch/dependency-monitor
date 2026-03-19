@@ -1,0 +1,393 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Hoe werkt het?{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="relative -mx-4 sm:-mx-6 lg:-mx-8 -mt-8 mb-10 px-4 sm:px-6 lg:px-8 py-12 bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 overflow-hidden rounded-b-3xl">
+    <div class="absolute top-0 left-1/4 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+    <div class="absolute bottom-0 right-1/4 w-48 h-48 bg-purple-400/20 rounded-full blur-3xl"></div>
+
+    <div class="relative">
+        <h1 class="text-3xl font-bold text-white mb-2">Hoe werkt het?</h1>
+        <p class="text-indigo-200 text-lg">Alles wat je moet weten over FenoFin Monitor</p>
+    </div>
+</div>
+
+<!-- Wat kan ik doen? -->
+<section class="mb-10">
+    <h2 class="text-xl font-bold text-gray-900 mb-4">Wat kan ik doen?</h2>
+    <div class="grid md:grid-cols-3 gap-4">
+        <!-- Dependency Monitor -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col">
+            <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
+                <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+            </div>
+            <h3 class="font-semibold text-gray-900 mb-2">Dependency Monitor</h3>
+            <p class="text-sm text-gray-600 mb-4 flex-1">Scant Python dependencies op verouderde packages, security vulnerabilities, API deprecaties en breaking changes.</p>
+            <div class="flex items-center gap-2 text-xs text-indigo-600 font-medium">
+                <a href="{% url 'dashboard:dependency_home' %}" class="hover:underline">Home</a>
+                <span class="text-gray-300">&rarr;</span>
+                <span>"Start Scan" knop</span>
+            </div>
+        </div>
+
+        <!-- Bedrijfsmonitor -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col">
+            <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/>
+                </svg>
+            </div>
+            <h3 class="font-semibold text-gray-900 mb-2">Bedrijfsmonitor</h3>
+            <p class="text-sm text-gray-600 mb-4 flex-1">Onderzoekt fiscale ontwikkelingen en schrijft blog-artikelen voor het MKB.</p>
+            <div class="flex items-center gap-2 text-xs text-purple-600 font-medium">
+                <a href="{% url 'dashboard:fiscal_home' %}" class="hover:underline">Bedrijfsmonitor</a>
+                <span class="text-gray-300">&rarr;</span>
+                <span>"Start Onderzoek"</span>
+            </div>
+        </div>
+
+        <!-- Team Builder -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col">
+            <div class="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center mb-4">
+                <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                </svg>
+            </div>
+            <h3 class="font-semibold text-gray-900 mb-2">Team Builder</h3>
+            <p class="text-sm text-gray-600 mb-4 flex-1">Maak je eigen AI-teams met custom agents, taken en tools.</p>
+            <div class="flex items-center gap-2 text-xs text-emerald-600 font-medium">
+                <a href="{% url 'dashboard:team_list' %}" class="hover:underline">AI Teams</a>
+                <span class="text-gray-300">&rarr;</span>
+                <span>"Nieuw Team +"</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Hoe werkt een scan? — Flowdiagram -->
+<section class="mb-10">
+    <h2 class="text-xl font-bold text-gray-900 mb-4">Hoe werkt een scan?</h2>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <div class="flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-0">
+            <!-- Step 1 -->
+            <div class="flex items-center gap-3 flex-shrink-0">
+                <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-bold">1</div>
+                <span class="text-sm font-medium text-gray-900">Start Scan</span>
+            </div>
+            <div class="hidden md:block w-8 border-t-2 border-dashed border-indigo-300 mx-2"></div>
+
+            <!-- Step 2 -->
+            <div class="flex items-center gap-3 flex-shrink-0">
+                <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-bold">2</div>
+                <span class="text-sm font-medium text-gray-900">Agents draaien</span>
+            </div>
+            <div class="hidden md:block w-8 border-t-2 border-dashed border-indigo-300 mx-2"></div>
+
+            <!-- Step 3 -->
+            <div class="flex items-center gap-3 flex-shrink-0">
+                <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-bold">3</div>
+                <span class="text-sm font-medium text-gray-900">Tools aangeroepen</span>
+            </div>
+            <div class="hidden md:block w-8 border-t-2 border-dashed border-indigo-300 mx-2"></div>
+
+            <!-- Step 4 -->
+            <div class="flex items-center gap-3 flex-shrink-0">
+                <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-bold">4</div>
+                <span class="text-sm font-medium text-gray-900">Rapport gegenereerd</span>
+            </div>
+            <div class="hidden md:block w-8 border-t-2 border-dashed border-indigo-300 mx-2"></div>
+
+            <!-- Step 5 -->
+            <div class="flex items-center gap-3 flex-shrink-0">
+                <div class="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center text-white text-sm font-bold">5</div>
+                <span class="text-sm font-medium text-gray-900">E-mail verstuurd</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Beschikbare AI Teams -->
+<section class="mb-10">
+    <h2 class="text-xl font-bold text-gray-900 mb-4">Beschikbare AI Teams</h2>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Team</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Agents</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Taken</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">LLM</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Kosten</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Output</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Dependency Monitor</td>
+                        <td class="px-4 py-3 text-gray-600">
+                            <span class="text-indigo-600 font-medium">5</span>
+                            <span class="text-xs text-gray-400 block">Scanner, API Monitor, Security, Breaking Changes, Report Writer</span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-600">5</td>
+                        <td class="px-4 py-3 text-gray-600">
+                            <span class="text-xs">Gemini Flash + Pro</span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">~$0.02–0.05</span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-600 text-xs">Rapport + e-mail</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Bedrijfsmonitor</td>
+                        <td class="px-4 py-3 text-gray-600">
+                            <span class="text-indigo-600 font-medium">4</span>
+                            <span class="text-xs text-gray-400 block">Onderzoeker, Analist, Schrijver, Reviewer</span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-600">4</td>
+                        <td class="px-4 py-3 text-gray-600">
+                            <span class="text-xs">Gemini Flash + Pro</span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">~$0.03–0.08</span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-600 text-xs">Blog-artikelen</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- Beschikbare Tools -->
+<section class="mb-10">
+    <h2 class="text-xl font-bold text-gray-900 mb-4">Beschikbare Tools</h2>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Tool</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Beschrijving</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Gebruikt door</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Requirements Reader</td>
+                        <td class="px-4 py-3 text-gray-600">Leest en parset requirements.txt</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">Dependency Monitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">PyPI Version Checker</td>
+                        <td class="px-4 py-3 text-gray-600">Checkt nieuwste versie op PyPI</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">Dependency Monitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">API Status Checker</td>
+                        <td class="px-4 py-3 text-gray-600">Checkt status van gemonitorde API's</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">Dependency Monitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Vulnerability Scanner</td>
+                        <td class="px-4 py-3 text-gray-600">Scant tegen OSV.dev kwetsbaarheidsdb</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">Dependency Monitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">GitHub Changelog</td>
+                        <td class="px-4 py-3 text-gray-600">Haalt GitHub release notes op</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">Dependency Monitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Email Sender</td>
+                        <td class="px-4 py-3 text-gray-600">Verstuurt e-mails (SMTP)</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">Dependency Monitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Government Site Fetcher</td>
+                        <td class="px-4 py-3 text-gray-600">Fetcht Nederlandse overheidssites</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">Bedrijfsmonitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Tax News Searcher</td>
+                        <td class="px-4 py-3 text-gray-600">Zoekt fiscaal nieuws en ontwikkelingen</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">Bedrijfsmonitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Fiscal Deadline Checker</td>
+                        <td class="px-4 py-3 text-gray-600">Controleert fiscale deadlines</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">Bedrijfsmonitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Article Content Extractor</td>
+                        <td class="px-4 py-3 text-gray-600">Haalt artikelinhoud op van URLs (overheid + nieuws + vakbladen)</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">Bedrijfsmonitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Dutch Tax Rate Comparator</td>
+                        <td class="px-4 py-3 text-gray-600">Vergelijkt belastingtarieven 2025 vs 2026</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">Bedrijfsmonitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Fiscal News Aggregator</td>
+                        <td class="px-4 py-3 text-gray-600">Doorzoekt vakbladen, nieuws en MKB-bronnen</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">Bedrijfsmonitor</span></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Belastingdienst Structured Data</td>
+                        <td class="px-4 py-3 text-gray-600">Haalt gestructureerde tarieven/tabellen van belastingdienst.nl</td>
+                        <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">Bedrijfsmonitor</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- LLM Providers -->
+<section class="mb-10">
+    <h2 class="text-xl font-bold text-gray-900 mb-4">LLM Providers</h2>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Provider</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Modellen</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-900">Sterke punten</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Gemini</td>
+                        <td class="px-4 py-3 text-gray-600">
+                            <code class="text-xs bg-gray-100 px-1.5 py-0.5 rounded">gemini-3-flash-preview</code>
+                            <code class="text-xs bg-gray-100 px-1.5 py-0.5 rounded ml-1">gemini-3.1-pro-preview</code>
+                        </td>
+                        <td class="px-4 py-3 text-gray-600 text-xs">Snel, goedkoop, grote context</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">Anthropic</td>
+                        <td class="px-4 py-3 text-gray-600">
+                            <code class="text-xs bg-gray-100 px-1.5 py-0.5 rounded">claude-sonnet-4-6</code>
+                            <code class="text-xs bg-gray-100 px-1.5 py-0.5 rounded ml-1">claude-haiku-4-5</code>
+                        </td>
+                        <td class="px-4 py-3 text-gray-600 text-xs">Nauwkeurig, veilig</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-900">OpenAI</td>
+                        <td class="px-4 py-3 text-gray-600">
+                            <code class="text-xs bg-gray-100 px-1.5 py-0.5 rounded">gpt-4o</code>
+                            <code class="text-xs bg-gray-100 px-1.5 py-0.5 rounded ml-1">gpt-4o-mini</code>
+                        </td>
+                        <td class="px-4 py-3 text-gray-600 text-xs">Breed inzetbaar</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- Team Builder handleiding -->
+<section class="mb-10">
+    <h2 class="text-xl font-bold text-gray-900 mb-4">Team Builder handleiding</h2>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <div class="space-y-6">
+            <!-- Stap 1 -->
+            <div class="flex gap-4">
+                <div class="flex-shrink-0 w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-bold">1</div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-1">Maak een team</h3>
+                    <p class="text-sm text-gray-600">Ga naar <a href="{% url 'dashboard:team_list' %}" class="text-indigo-600 hover:underline">AI Teams</a> en klik op "Nieuw Team +". Geef je team een naam en optioneel een beschrijving.</p>
+                </div>
+            </div>
+
+            <!-- Stap 2 -->
+            <div class="flex gap-4">
+                <div class="flex-shrink-0 w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-bold">2</div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-1">Voeg variabelen toe</h3>
+                    <p class="text-sm text-gray-600">Maak dynamische input met <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs">{variabele_naam}</code> in goals en taken. Variabelen worden bij uitvoering ingevuld.</p>
+                </div>
+            </div>
+
+            <!-- Stap 3 -->
+            <div class="flex gap-4">
+                <div class="flex-shrink-0 w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-bold">3</div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-1">Configureer agents</h3>
+                    <p class="text-sm text-gray-600">Kies een rol, selecteer LLM provider en model, en wijs tools toe. Elke agent heeft een goal en backstory.</p>
+                </div>
+            </div>
+
+            <!-- Stap 4 -->
+            <div class="flex gap-4">
+                <div class="flex-shrink-0 w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-bold">4</div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-1">Definieer taken</h3>
+                    <p class="text-sm text-gray-600">Beschrijf de taken met verwachte output en stel context-afhankelijkheden in tussen taken.</p>
+                </div>
+            </div>
+
+            <!-- Stap 5 -->
+            <div class="flex gap-4">
+                <div class="flex-shrink-0 w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center text-white text-sm font-bold">5</div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-1">Voer uit</h3>
+                    <p class="text-sm text-gray-600">Vul de variabelen in, klik op "Team uitvoeren" en volg de voortgang live in het logvenster.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Rapport statussen -->
+<section class="mb-10">
+    <h2 class="text-xl font-bold text-gray-900 mb-4">Rapport statussen</h2>
+    <div class="grid sm:grid-cols-3 gap-4">
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                <span class="font-semibold text-gray-900 text-sm">Kritiek</span>
+            </div>
+            <p class="text-xs text-gray-500">Er zijn beveiligingsproblemen of critical deprecaties gevonden die direct actie vereisen.</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                <span class="font-semibold text-gray-900 text-sm">Waarschuwing</span>
+            </div>
+            <p class="text-xs text-gray-500">Er zijn verouderde packages of aankomende deprecaties. Plan een update in.</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                <span class="font-semibold text-gray-900 text-sm">Alles OK</span>
+            </div>
+            <p class="text-xs text-gray-500">Alle dependencies zijn up-to-date en er zijn geen bekende problemen.</p>
+        </div>
+    </div>
+</section>
+
+<!-- Technische stack -->
+<section class="mb-6">
+    <h2 class="text-xl font-bold text-gray-900 mb-4">Technische stack</h2>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <div class="flex flex-wrap gap-2">
+            <span class="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium">Django 6.0</span>
+            <span class="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium">CrewAI</span>
+            <span class="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium">HTMX</span>
+            <span class="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium">Tailwind CSS</span>
+            <span class="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium">Gemini 3.1 Pro</span>
+            <span class="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium">Gemini 3 Flash</span>
+            <span class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">SQLite</span>
+            <span class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">OSV.dev</span>
+            <span class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">PyPI API</span>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Bedrijven zoeken{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <a href="{% url 'dashboard:sales_home' %}" class="text-sm text-gray-500 hover:text-indigo-600 transition-colors">&larr; Terug naar Sales</a>
+    <h1 class="text-3xl font-bold text-gray-900 mt-2">Bedrijven zoeken</h1>
+    <p class="text-gray-500 mt-1">Zoek bedrijven via Google Places en sla ze op als prospect</p>
+</div>
+
+<div class="bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm mb-8">
+    <form hx-post="{% url 'dashboard:htmx_sales_search_results' %}"
+          hx-target="#search-results"
+          hx-swap="innerHTML"
+          hx-indicator="#search-spinner"
+          class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {% csrf_token %}
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Zoekterm</label>
+            <input type="text" name="query" required placeholder="bijv. administratiekantoor" class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Locatie / Stad</label>
+            <input type="text" name="location" placeholder="bijv. Utrecht" class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Straal (km)</label>
+            <input type="number" name="radius_km" value="10" min="1" max="50" class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Toevoegen aan groep</label>
+            <select name="group_slug">
+                <option value="">— Geen groep —</option>
+                {% for group in groups %}
+                <option value="{{ group.slug }}">{{ group.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Max resultaten</label>
+            <input type="number" name="max_results" value="20" min="1" max="20" class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Min. beoordeling</label>
+            <select name="min_rating">
+                <option value="">Alle</option>
+                <option value="3.0">3.0+ sterren</option>
+                <option value="3.5">3.5+ sterren</option>
+                <option value="4.0">4.0+ sterren</option>
+                <option value="4.5">4.5+ sterren</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Bedrijfstype</label>
+            <select name="business_type">
+                <option value="">Alle types</option>
+                {% for bt in business_types %}
+                <option value="{{ bt.google_type }}">{{ bt.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="sm:col-span-2 lg:col-span-4 flex items-center gap-3">
+            <button type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-sm font-semibold rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition-all shadow-lg shadow-indigo-200">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                Zoeken
+            </button>
+            <span id="search-spinner" class="htmx-indicator">
+                <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            </span>
+        </div>
+    </form>
+</div>
+
+<div id="search-results"></div>
+{% endblock %}

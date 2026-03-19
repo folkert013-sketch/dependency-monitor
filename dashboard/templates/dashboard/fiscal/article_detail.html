@@ -1,0 +1,149 @@
+{% extends "dashboard/base.html" %}
+{% load report_filters %}
+
+{% block title %}{{ article.title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <!-- Breadcrumb -->
+    <nav class="flex items-center gap-2 text-sm text-gray-500 mb-6">
+        <a href="{% url 'dashboard:fiscal_home' %}" class="hover:text-indigo-600 transition-colors">Bedrijfsmonitor</a>
+        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <span class="text-gray-400 truncate">{{ article.title|truncatewords:6 }}</span>
+    </nav>
+
+    <!-- Dark gradient header -->
+    <div class="relative bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 rounded-2xl p-8 mb-8 overflow-hidden">
+        <div class="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl"></div>
+        <div class="relative">
+            <!-- Badges -->
+            <div class="flex items-center gap-2 mb-4">
+                <span class="px-2.5 py-1 rounded-full text-xs font-medium {{ article.category|category_bg }}">
+                    {{ article.get_category_display }}
+                </span>
+                <span class="px-2.5 py-1 rounded-full text-xs font-medium {{ article.status|article_status_bg }}">
+                    {{ article.get_status_display }}
+                </span>
+            </div>
+
+            <!-- Title -->
+            <h1 class="text-2xl sm:text-3xl font-bold text-white mb-4 leading-tight">{{ article.title }}</h1>
+
+            <!-- Meta info -->
+            <div class="flex flex-wrap items-center gap-4 text-sm text-gray-400">
+                <span>{{ article.created_at|date:"d M Y" }}</span>
+                <span class="flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    {{ article.body|reading_time }} min leestijd
+                </span>
+                <span class="flex items-center gap-1">
+                    <svg class="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                    </svg>
+                    {{ article.quality_score }}/10
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Relevance tags -->
+    {% if article.relevance_tags %}
+    <div class="flex flex-wrap gap-2 mb-6">
+        {% for tag in article.relevance_tags %}
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+            {{ tag }}
+        </span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Deadline banner -->
+    {% if article.deadline_date %}
+    <div class="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+        <div class="flex-shrink-0 w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </div>
+        <div>
+            <p class="text-sm font-semibold text-red-800">Deadline: {{ article.deadline_date|date:"d F Y" }}</p>
+            <p class="text-xs text-red-600">Let op: deze datum is relevant voor dit onderwerp</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Intro block -->
+    <div class="bg-gradient-to-r from-indigo-50 to-purple-50 border-l-4 border-indigo-500 rounded-r-2xl p-6 mb-8">
+        <p class="text-gray-800 font-medium leading-relaxed">{{ article.intro }}</p>
+    </div>
+
+    <!-- Key takeaways -->
+    {% if article.key_takeaways %}
+    <div class="key-takeaway mb-8">
+        <div class="flex items-center gap-2 mb-3">
+            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <h3 class="text-sm font-bold text-indigo-900 uppercase tracking-wide">Kernpunten</h3>
+        </div>
+        <ul>
+            {% for takeaway in article.key_takeaways %}
+            <li>{{ takeaway }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Body -->
+    <article class="bg-white border border-gray-200/60 rounded-2xl shadow-sm p-8 mb-8">
+        <div class="prose prose-sm prose-gray max-w-none
+                    prose-headings:text-gray-900 prose-headings:font-semibold
+                    prose-p:text-gray-600 prose-p:leading-relaxed
+                    prose-a:text-indigo-600 prose-a:no-underline hover:prose-a:underline
+                    prose-li:text-gray-600
+                    prose-strong:text-gray-900
+                    prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm">
+            {{ article.body|render_markdown }}
+        </div>
+    </article>
+
+    <!-- Action items -->
+    {% if article.action_items %}
+    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-6 mb-8">
+        <div class="flex items-center gap-2 mb-4">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+            <h3 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Actiepunten</h3>
+        </div>
+        <ol class="space-y-2">
+            {% for item in article.action_items %}
+            <li class="flex items-start gap-3">
+                <span class="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-bold text-blue-700">{{ forloop.counter }}</span>
+                <span class="text-sm text-blue-800 leading-relaxed pt-0.5">{{ item }}</span>
+            </li>
+            {% endfor %}
+        </ol>
+    </div>
+    {% endif %}
+
+    <!-- Sources as card grid -->
+    {% if article.sources %}
+    <section class="mb-8">
+        <h2 class="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-4">Bronnen</h2>
+        <div class="grid sm:grid-cols-2 gap-3">
+            {% for url in article.sources %}
+            <a href="{{ url }}" target="_blank" rel="noopener noreferrer"
+               class="group flex items-start gap-3 bg-white border border-gray-200/60 rounded-2xl p-4 hover:shadow-lg hover:border-indigo-200 transition-all duration-300">
+                <div class="mt-0.5 flex-shrink-0 w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+                    <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                </div>
+                <span class="text-sm text-indigo-600 group-hover:text-indigo-800 break-all leading-relaxed">{{ url }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Disclaimer -->
+    <div class="flex items-start gap-3 bg-gray-50 border border-gray-200/60 rounded-2xl p-5 text-xs text-gray-500 leading-relaxed">
+        <svg class="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <p><strong>Disclaimer:</strong> Dit artikel is AI-gegenereerd en dient als informatie, niet als fiscaal advies.
+        Raadpleeg altijd een belastingadviseur voor specifiek advies over uw situatie.</p>
+    </div>
+</div>
+{% endblock %}

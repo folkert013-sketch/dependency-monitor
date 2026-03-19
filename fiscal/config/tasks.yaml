@@ -1,0 +1,149 @@
+research_fiscal_topics:
+  description: >
+    Doorzoek de volgende Nederlandse bronnen op recente fiscale ontwikkelingen
+    die relevant zijn voor het MKB:
+
+    Overheidsbronnen:
+    - belastingdienst.nl (BTW, IB, VPB, loonbelasting)
+    - rijksoverheid.nl (belastingplan, wetswijzigingen)
+    - kvk.nl / ondernemersplein.kvk.nl (MKB subsidies, regelingen)
+
+    Vakbladen en nieuws:
+    - accountant.nl, taxlive.nl, rendement.nl (vakbladen)
+    - nu.nl, nos.nl (algemeen nieuws — economie)
+    - mkbservicedesk.nl, mkb-nederland.nl (MKB-portals)
+
+    Zoek naar:
+    1. Recente wetswijzigingen of aankondigingen
+    2. Veranderingen in belastingtarieven of -regels
+    3. Nieuwe subsidies of regelingen voor ondernemers
+    4. Aankomende fiscale deadlines
+
+    Gebruik de Tax News Searcher en Fiscal News Aggregator om breed te zoeken.
+    Gebruik de Article Content Extractor om de inhoud van gevonden artikelen op te halen.
+    Gebruik de Belastingdienst Structured Data tool voor gestructureerde tarieven.
+    Gebruik de Fiscal Deadline Checker voor aankomende deadlines.
+    Gebruik de Government Site Fetcher voor specifieke overheidspagina's.
+
+    Lever een uitgebreid overzicht van alle gevonden ontwikkelingen met bronvermelding.
+  expected_output: >
+    Een gestructureerd overzicht van 5-10 gevonden fiscale ontwikkelingen, elk met:
+    - Titel/onderwerp
+    - Samenvatting (2-3 zinnen)
+    - Categorie (btw/ib/vpb/loonbelasting/subsidies/deadlines/algemeen)
+    - Bron-URL
+    - Relevantie voor MKB (hoog/midden/laag)
+
+analyze_fiscal_trends:
+  description: >
+    Analyseer de gevonden fiscale ontwikkelingen en bepaal welke onderwerpen het meest
+    relevant en urgent zijn voor MKB-ondernemers.
+
+    Gebruik de Dutch Tax Rate Comparator tool om tariefwijzigingen tussen 2025 en 2026
+    te vergelijken. Voer de tool uit met 'all' voor een volledig overzicht, of met
+    specifieke categorieën (btw, ib, vpb, zelfstandigenaftrek, arbeidskorting, box3).
+
+    Selecteer 2-4 onderwerpen voor blog-artikelen op basis van:
+    1. Urgentie (aankomende deadlines, recente wijzigingen)
+    2. Impact (hoeveel ondernemers geraakt worden)
+    3. Actualiteit (hoe recent is het nieuws)
+    4. Actiegerichtheid (kan de ondernemer er iets mee)
+
+    Maak per geselecteerd onderwerp een schrijfbriefing met:
+    - Voorgestelde titel
+    - Kernpunten om te behandelen
+    - Doelgroep binnen het MKB (mkb, zzp, bv)
+    - Suggestie voor categorie
+    - Relevante bronnen
+    - Eventuele tariefvergelijkingen uit de comparator
+  expected_output: >
+    2-4 gedetailleerde schrijfbriefings, elk met voorgestelde titel, kernpunten,
+    doelgroep, categorie en bronnen. Gerangschikt op urgentie/impact.
+    Inclusief relevante tariefvergelijkingen waar van toepassing.
+
+write_blog_articles:
+  description: >
+    Schrijf op basis van de schrijfbriefings 2-4 professionele blog-artikelen in het
+    Nederlands voor MKB-ondernemers.
+
+    Gebruik de Article Content Extractor tool om bronartikelen te raadplegen voor
+    feitelijke details. Gebruik de Dutch Tax Rate Comparator tool voor actuele
+    tariefvergelijkingen die je in tabellen kunt verwerken.
+
+    Elk artikel moet bevatten:
+    1. **title**: Een pakkende, informatieve titel (max 100 tekens)
+    2. **intro**: Een korte, pakkende samenvatting van 2-3 zinnen die de lezer direct
+       informeert over het belangrijkste punt
+    3. **body**: Een uitgebreid artikel in markdown met:
+       - Begin met een `<div class="key-takeaway">` box met 3-5 kernpunten als bullet list
+       - Duidelijke koppen (## en ###)
+       - Concrete informatie en cijfers
+       - Gebruik callout syntax voor belangrijke informatie:
+         - `> [!TIP] Titel` voor tips en adviezen
+         - `> [!WARNING] Titel` voor waarschuwingen
+         - `> [!DEADLINE] Titel` voor deadlines
+         - `> [!ACTION] Titel` voor actiepunten
+       - Gebruik markdown tabellen voor tariefvergelijkingen
+       - Praktische tips voor ondernemers
+       - Sluit af met een `> [!ACTION] Wat moet je doen?` callout met concrete actiepunten
+       - 400-800 woorden
+       - Minstens 1 callout box en 1 tabel per artikel
+    4. **category**: Een van: btw, ib, vpb, loonbelasting, subsidies, deadlines, algemeen
+    5. **sources**: Lijst van bron-URLs
+
+    Schrijf professioneel maar toegankelijk. Vermijd AI-clichés. Wees concreet en
+    actiegericht.
+  expected_output: >
+    2-4 complete artikelen, elk met title, intro, body (markdown met callouts en tabellen),
+    category en sources.
+
+review_and_finalize:
+  description: >
+    Review elk geschreven artikel op:
+    1. Feitelijke correctheid — kloppen de cijfers, datums en regels?
+    2. Bronvermelding — zijn de bronnen correct en toegankelijk?
+    3. Leesbaarheid — is het begrijpelijk voor een MKB-ondernemer?
+    4. Compleetheid — mist er belangrijke informatie?
+    5. Kwaliteit — is het professioneel genoeg om te publiceren?
+    6. Structuur — bevat het artikel callout boxes, tabellen en key takeaways?
+
+    Gebruik de Article Content Extractor en Belastingdienst Structured Data tools
+    om bronnen en feiten te verifiëren waar nodig.
+
+    Geef elk artikel een quality_score van 1-10:
+    - 1-3: Onvoldoende, niet publiceren
+    - 4-6: Matig, concept houden voor revisie
+    - 7-8: Goed, klaar voor review
+    - 9-10: Uitstekend
+
+    BELANGRIJK: Lever het eindresultaat als een geldige JSON array met het volgende format:
+
+    ```json
+    [
+      {
+        "title": "Artikel titel",
+        "intro": "Korte intro tekst",
+        "body": "Volledige artikel body in markdown (inclusief callout syntax en tabellen)",
+        "category": "btw",
+        "sources": ["https://url1.nl", "https://url2.nl"],
+        "quality_score": 8,
+        "key_takeaways": ["Kernpunt 1", "Kernpunt 2", "Kernpunt 3"],
+        "action_items": ["Actiepunt 1", "Actiepunt 2"],
+        "deadline_date": "2026-03-31",
+        "relevance_tags": ["mkb", "zzp"]
+      }
+    ]
+    ```
+
+    Velden:
+    - key_takeaways: array van 3-5 kernpunten (korte zinnen)
+    - action_items: array van concrete actiepunten voor de ondernemer
+    - deadline_date: ISO datum (YYYY-MM-DD) als er een relevante deadline is, anders null
+    - relevance_tags: array van doelgroep tags — kies uit: mkb, zzp, bv, starter, werkgever
+
+    Zorg dat de JSON geldig is en alle velden aanwezig zijn.
+  expected_output: >
+    Een geldige JSON array met 2-4 artikel-objecten, elk met title, intro, body,
+    category, sources (array van URLs), quality_score (integer 1-10),
+    key_takeaways (array), action_items (array), deadline_date (ISO datum of null),
+    en relevance_tags (array).

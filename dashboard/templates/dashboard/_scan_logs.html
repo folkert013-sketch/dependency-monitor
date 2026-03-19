@@ -1,0 +1,9 @@
+{% for log in logs %}
+<div class="mt-1">
+    <span class="{% if log.event_type == 'error' %}text-red-400{% elif log.event_type == 'agent' %}text-cyan-400{% elif log.event_type == 'tool' %}text-yellow-400{% elif log.event_type == 'thought' %}text-gray-400{% elif log.event_type == 'task_done' %}text-emerald-400{% elif log.event_type == 'start' %}text-indigo-400{% elif log.event_type == 'result' %}text-emerald-300{% else %}text-gray-500{% endif %}">
+        {% if log.event_type == "agent" %}&#9654;{% elif log.event_type == "tool" %}&#128295;{% elif log.event_type == "thought" %}&#128172;{% elif log.event_type == "task_done" %}&#9989;{% elif log.event_type == "start" %}&#9658;{% elif log.event_type == "error" %}&#10060;{% elif log.event_type == "result" %}&#9733;{% else %}&#8226;{% endif %}
+    </span>
+    {% if log.agent_name %}<span class="text-indigo-300 font-semibold">{{ log.agent_name }}</span> {% endif %}<span class="text-gray-300">{{ log.message }}</span>
+    <span class="text-gray-600 ml-2">{{ log.created_at|time:"H:i:s" }}</span>
+</div>
+{% endfor %}

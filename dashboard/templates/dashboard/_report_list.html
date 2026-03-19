@@ -4,41 +4,48 @@
 <div class="grid gap-4">
     {% for report in reports %}
     <a href="{% url 'dashboard:report_detail' report.pk %}"
-       class="block bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-indigo-200 transition-all p-5">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center gap-4">
-                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold {{ report.status|status_bg }}">
-                    {{ report.get_status_display }}
-                </span>
-                <div>
-                    <p class="font-semibold text-gray-900">{{ report.created_at|date:"d M Y, H:i" }}</p>
-                    <p class="text-sm text-gray-500">
-                        {{ report.total_dependencies }} dependencies gescand
-                    </p>
+       class="group block bg-white rounded-2xl shadow-sm border border-gray-200/60 hover:shadow-xl transition-all duration-300 overflow-hidden">
+        <div class="flex items-center">
+            <!-- Colored accent bar left -->
+            <div class="w-1 self-stretch {% if report.status == 'critical' %}bg-red-500{% elif report.status == 'warning' %}bg-amber-500{% else %}bg-emerald-500{% endif %}"></div>
+            <div class="flex-1 flex items-center justify-between p-5">
+                <div class="flex items-center gap-4">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold {{ report.status|status_bg }}">
+                        <span class="w-1.5 h-1.5 rounded-full {% if report.status == 'critical' %}bg-red-500{% elif report.status == 'warning' %}bg-amber-500{% else %}bg-emerald-500{% endif %}"></span>
+                        {{ report.get_status_display }}
+                    </span>
+                    <div>
+                        <p class="font-semibold text-gray-900">{{ report.created_at|date:"d M Y, H:i" }}</p>
+                        <p class="text-sm text-gray-500">
+                            {{ report.total_dependencies }} dependencies gescand
+                        </p>
+                    </div>
                 </div>
-            </div>
-            <div class="flex items-center gap-6 text-sm">
-                {% if report.vulnerability_count %}
-                <span class="text-red-600 font-medium">{{ report.vulnerability_count }} vulnerabilities</span>
-                {% endif %}
-                {% if report.outdated_count %}
-                <span class="text-amber-600 font-medium">{{ report.outdated_count }} verouderd</span>
-                {% endif %}
-                <span class="text-gray-400">${{ report.estimated_cost }}</span>
-                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                </svg>
+                <div class="flex items-center gap-6 text-sm">
+                    {% if report.vulnerability_count %}
+                    <span class="text-red-600 font-medium">{{ report.vulnerability_count }} vulnerabilities</span>
+                    {% endif %}
+                    {% if report.outdated_count %}
+                    <span class="text-amber-600 font-medium">{{ report.outdated_count }} verouderd</span>
+                    {% endif %}
+                    <span class="text-gray-400">${{ report.estimated_cost }}</span>
+                    <svg class="w-5 h-5 text-gray-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </div>
             </div>
         </div>
     </a>
     {% endfor %}
 </div>
 {% else %}
-<div class="text-center py-16">
-    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-    </svg>
-    <h3 class="mt-4 text-lg font-medium text-gray-900">Nog geen rapporten</h3>
-    <p class="mt-2 text-gray-500">Draai <code class="bg-gray-100 px-2 py-0.5 rounded text-sm">python manage.py run_monitor</code> om de eerste check te starten.</p>
+<div class="text-center py-20">
+    <div class="mx-auto w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
+        <svg class="h-8 w-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+    </div>
+    <h3 class="text-lg font-semibold text-gray-900">Nog geen rapporten</h3>
+    <p class="mt-2 text-gray-500 max-w-sm mx-auto">Start een scan om je eerste dependency check uit te voeren en inzicht te krijgen in je project.</p>
 </div>
 {% endif %}

@@ -1,0 +1,122 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Sales Dagboek{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900">Dagboek</h1>
+        <p class="text-gray-500 mt-1">Dagdoelen, resultaten en notities bijhouden</p>
+    </div>
+    <a href="{% url 'dashboard:sales_diary_edit' today|date:'Y-m-d' %}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold rounded-xl hover:from-emerald-700 hover:to-emerald-800 transition-all shadow-lg shadow-emerald-200 hover:shadow-xl">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        {% if today_entry %}Vandaag bewerken{% else %}Nieuwe entry{% endif %}
+    </a>
+</div>
+
+{% if page_obj %}
+<div class="space-y-4">
+    {% for entry in page_obj %}
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                    <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">{{ entry.date|date:"l j F Y" }}</h3>
+                    <div class="flex items-center gap-4 mt-0.5">
+                        <span class="text-xs text-indigo-600 font-medium">Doel: {{ entry.total_prospects_target }} te benaderen</span>
+                        <span class="text-xs text-emerald-600 font-medium">Gedaan: {{ entry.total_prospects_contacted }} benaderd</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{% url 'dashboard:sales_diary_edit' entry.date|date:'Y-m-d' %}" class="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Bewerken">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                </a>
+                <form method="post" action="{% url 'dashboard:htmx_sales_diary_delete' entry.date|date:'Y-m-d' %}" data-confirm="Weet je zeker dat je deze entry wilt verwijderen?">
+                    {% csrf_token %}
+                    <button type="submit" class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Verwijderen">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {% if entry.total_prospects_target > 0 %}
+        <div class="mb-4">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-medium text-gray-500">Voortgang</span>
+                <span class="text-xs font-semibold {% if entry.prospect_progress_pct >= 100 %}text-emerald-600{% elif entry.prospect_progress_pct >= 50 %}text-amber-600{% else %}text-indigo-600{% endif %}">
+                    {{ entry.total_prospects_contacted }}/{{ entry.total_prospects_target }} ({{ entry.prospect_progress_pct }}%)
+                </span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-2">
+                <div class="h-2 rounded-full transition-all {% if entry.prospect_progress_pct >= 100 %}bg-emerald-500{% elif entry.prospect_progress_pct >= 50 %}bg-amber-500{% else %}bg-indigo-500{% endif %}"
+                     style="width: {{ entry.prospect_progress_pct }}%"></div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="grid md:grid-cols-3 gap-4">
+            {% with diary_goals=entry.diary_goals.all %}
+            {% if diary_goals %}
+            <div class="bg-indigo-50/50 rounded-xl p-4">
+                <h4 class="text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-2">Doelen</h4>
+                <ul class="space-y-1.5">
+                    {% for goal in diary_goals %}
+                    <li class="text-sm text-gray-700 flex items-center justify-between gap-2">
+                        <span>{{ goal.description|default:"—" }}</span>
+                        {% if goal.prospects_target > 0 %}
+                        <span class="text-xs font-medium shrink-0 {% if goal.prospects_contacted_actual >= goal.prospects_target %}text-emerald-600{% else %}text-indigo-500{% endif %}">{{ goal.prospects_contacted_actual }}/{{ goal.prospects_target }}</span>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% endwith %}
+            {% if entry.results %}
+            <div class="bg-emerald-50/50 rounded-xl p-4">
+                <h4 class="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-2">Resultaten</h4>
+                <p class="text-sm text-gray-700 whitespace-pre-line">{{ entry.results }}</p>
+            </div>
+            {% endif %}
+            {% if entry.notes %}
+            <div class="bg-amber-50/50 rounded-xl p-4">
+                <h4 class="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-2">Notities</h4>
+                <p class="text-sm text-gray-700 whitespace-pre-line">{{ entry.notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<div class="flex justify-center mt-8 gap-2">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">Vorige</a>
+    {% endif %}
+    <span class="px-4 py-2 text-sm text-gray-500">Pagina {{ page_obj.number }} van {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">Volgende</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="text-center py-16">
+    <div class="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+    </div>
+    <h3 class="text-lg font-semibold text-gray-900 mb-1">Nog geen dagboek entries</h3>
+    <p class="text-gray-500 mb-6">Begin met het bijhouden van je dagelijkse sales activiteiten.</p>
+    <a href="{% url 'dashboard:sales_diary_edit' today|date:'Y-m-d' %}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold rounded-xl hover:from-emerald-700 hover:to-emerald-800 transition-all shadow-lg shadow-emerald-200">
+        Eerste entry aanmaken
+    </a>
+</div>
+{% endif %}
+{% endblock %}

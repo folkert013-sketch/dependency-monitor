@@ -1,0 +1,48 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Bedrijfstypes{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'dashboard:sales_home' %}" class="text-sm text-gray-500 hover:text-indigo-600 transition-colors">&larr; Terug naar Sales</a>
+</div>
+
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900">Bedrijfstypes</h1>
+        <p class="text-gray-500 mt-1">Beheer de bedrijfstypes die beschikbaar zijn bij het zoeken</p>
+    </div>
+</div>
+
+<!-- Add form -->
+<div class="bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm mb-6">
+    <h2 class="text-sm font-semibold text-gray-700 mb-4">Nieuw type toevoegen</h2>
+    <form hx-post="{% url 'dashboard:htmx_business_type_add' %}"
+          hx-target="#business-type-list"
+          hx-swap="innerHTML"
+          class="flex flex-col sm:flex-row items-end gap-3">
+        {% csrf_token %}
+        <div class="flex-1 w-full">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Google type</label>
+            <input type="text" name="google_type" required placeholder="bijv. real_estate_agency"
+                   class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div class="flex-1 w-full">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Label</label>
+            <input type="text" name="label" required placeholder="bijv. Makelaar"
+                   class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <button type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-sm font-semibold rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition-all shadow-lg shadow-indigo-200 whitespace-nowrap">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            Toevoegen
+        </button>
+    </form>
+</div>
+
+<!-- List -->
+<div class="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+    <div id="business-type-list">
+        {% include "dashboard/sales/_business_type_list.html" %}
+    </div>
+</div>
+{% endblock %}

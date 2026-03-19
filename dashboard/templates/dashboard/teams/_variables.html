@@ -1,0 +1,144 @@
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold text-gray-900">Variabelen</h2>
+            <p class="text-xs text-gray-500 mt-0.5">Gebruik <code class="bg-gray-100 px-1 rounded">{naam}</code> in agent goals en task beschrijvingen voor dynamische waarden</p>
+        </div>
+        <button onclick="this.closest('.bg-white').querySelector('#add-variable-form').classList.toggle('hidden')"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Variabele toevoegen
+        </button>
+    </div>
+
+    <!-- Add variable form (hidden by default) -->
+    <div id="add-variable-form" class="hidden border-b border-gray-100 bg-gray-50 p-5">
+        <form hx-post="{% url 'dashboard:team_variable_add' team.slug %}" hx-target="#variables-area" hx-swap="outerHTML">
+            {% csrf_token %}
+            <div class="grid sm:grid-cols-3 gap-3 mb-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Naam (identifier)</label>
+                    <input type="text" name="name" required placeholder="bijv. requirements_path" pattern="[a-z_]+" title="Alleen kleine letters en underscores"
+                           class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Label (weergavenaam)</label>
+                    <input type="text" name="label" required placeholder="Pad naar requirements.txt"
+                           class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Type</label>
+                    <select name="input_type" class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="text">Text</option>
+                        <option value="textarea">Textarea</option>
+                        <option value="file_path">File path</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid sm:grid-cols-2 gap-3 mb-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Standaardwaarde</label>
+                    <input type="text" name="default_value" placeholder="(optioneel)"
+                           class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Help-tekst</label>
+                    <input type="text" name="description" placeholder="Uitleg voor de gebruiker"
+                           class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+            </div>
+            <div class="flex items-center justify-between">
+                <label class="flex items-center gap-2 text-sm text-gray-600">
+                    <input type="checkbox" name="required" checked class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    Verplicht
+                </label>
+                <button type="submit" class="px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
+                    Toevoegen
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Variable list -->
+    {% if variables %}
+    <div class="divide-y divide-gray-100">
+        {% for var in variables %}
+        <div class="px-6 py-3 flex items-center justify-between group" id="var-row-{{ var.pk }}">
+            <div class="flex items-center gap-3 min-w-0">
+                <code class="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-mono flex-shrink-0">{{"{"}}{{ var.name }}{{"}"}}</code>
+                <span class="text-sm text-gray-700 truncate">{{ var.label }}</span>
+                <span class="px-1.5 py-0.5 rounded text-xs font-medium {% if var.input_type == 'file_path' %}bg-amber-100 text-amber-700{% elif var.input_type == 'textarea' %}bg-blue-100 text-blue-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                    {{ var.get_input_type_display }}
+                </span>
+                {% if var.default_value %}
+                <span class="text-xs text-gray-400 truncate max-w-[200px]">default: {{ var.default_value }}</span>
+                {% endif %}
+                {% if not var.required %}
+                <span class="text-xs text-gray-400">(optioneel)</span>
+                {% endif %}
+            </div>
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onclick="document.getElementById('edit-var-{{ var.pk }}').classList.toggle('hidden');this.closest('[id^=var-row]').classList.toggle('hidden')"
+                        class="p-1.5 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-gray-100 transition-colors" title="Bewerken">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                </button>
+                <button hx-post="{% url 'dashboard:team_variable_delete' team.slug var.pk %}" hx-target="#variables-area" hx-swap="outerHTML"
+                        hx-confirm="Variabele '{{ var.name }}' verwijderen?"
+                        class="p-1.5 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-100 transition-colors" title="Verwijderen">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+            </div>
+        </div>
+        <!-- Edit form (hidden) -->
+        <div id="edit-var-{{ var.pk }}" class="hidden bg-gray-50 border-b border-gray-100 p-5">
+            <form hx-post="{% url 'dashboard:team_variable_edit' team.slug var.pk %}" hx-target="#variables-area" hx-swap="outerHTML">
+                {% csrf_token %}
+                <div class="grid sm:grid-cols-3 gap-3 mb-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Naam</label>
+                        <input type="text" name="name" value="{{ var.name }}" required class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Label</label>
+                        <input type="text" name="label" value="{{ var.label }}" required class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Type</label>
+                        <select name="input_type" class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="text" {% if var.input_type == "text" %}selected{% endif %}>Text</option>
+                            <option value="textarea" {% if var.input_type == "textarea" %}selected{% endif %}>Textarea</option>
+                            <option value="file_path" {% if var.input_type == "file_path" %}selected{% endif %}>File path</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid sm:grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Standaardwaarde</label>
+                        <input type="text" name="default_value" value="{{ var.default_value }}" class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Help-tekst</label>
+                        <input type="text" name="description" value="{{ var.description }}" class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <label class="flex items-center gap-2 text-sm text-gray-600">
+                        <input type="checkbox" name="required" {% if var.required %}checked{% endif %} class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        Verplicht
+                    </label>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="document.getElementById('edit-var-{{ var.pk }}').classList.add('hidden');document.getElementById('var-row-{{ var.pk }}').classList.remove('hidden')"
+                                class="px-3 py-1.5 text-gray-500 text-sm rounded-lg hover:bg-gray-200 transition-colors">Annuleren</button>
+                        <button type="submit" class="px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">Opslaan</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-6 py-8 text-center text-sm text-gray-400">
+        Nog geen variabelen. Voeg variabelen toe om dynamische waarden in je agents en taken te gebruiken.
+    </div>
+    {% endif %}
+</div>
