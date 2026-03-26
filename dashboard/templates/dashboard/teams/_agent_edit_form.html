@@ -1,0 +1,88 @@
+<form hx-post="{% url 'dashboard:team_agent_edit' team.slug agent.pk %}" hx-target="#agents-tasks-area" hx-swap="outerHTML">
+    {% csrf_token %}
+    <div class="grid sm:grid-cols-2 gap-3 mb-3">
+        <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Rol</label>
+            <input type="text" name="role" value="{{ agent.role }}" required class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Provider</label>
+                <select name="llm_provider" id="provider-edit-{{ agent.pk }}" data-provider-select="edit-model-{{ agent.pk }}"
+                        class="tomselect-skip w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    {% for val, label in provider_choices %}
+                    <option value="{{ val }}" {% if agent.llm_provider == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Model</label>
+                <select name="llm_model" id="edit-model-{{ agent.pk }}"
+                        class="tomselect-skip w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    {% for pkey, models in suggested_models.items %}
+                    {% for m in models %}
+                    <option value="{{ m.id }}" data-provider="{{ pkey }}"
+                            {% if m.id == agent.llm_model %}selected{% endif %}
+                            {% if pkey != agent.llm_provider %}hidden disabled{% endif %}>
+                        {{ m.label }}
+                    </option>
+                    {% endfor %}
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-3 mb-3">
+        <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Opdracht / Goal</label>
+            <textarea name="goal" rows="3" required class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">{{ agent.goal }}</textarea>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Backstory</label>
+            <textarea name="backstory" rows="3" class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">{{ agent.backstory }}</textarea>
+        </div>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-3 mb-3">
+        <div id="tools-container-{{ agent.pk }}">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Tools</label>
+            <select name="tools" multiple placeholder="Selecteer tools..." id="tools-select-{{ agent.pk }}"
+                    {% if agent.is_manager %}disabled{% endif %}
+                    class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                {% for cat_key, cat in tool_choices_grouped.items %}
+                <optgroup label="{{ cat.label }}">
+                    {% for tool in cat.tools %}
+                    <option value="{{ tool.id }}" {% if tool.id in agent.tools %}selected{% endif %}>{{ tool.label }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
+            <p id="tools-hint-{{ agent.pk }}" class="text-xs text-amber-600 mt-1 {% if not agent.is_manager %}hidden{% endif %}">
+                Hoofdagent delegeert taken en kan geen tools gebruiken.
+            </p>
+        </div>
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Max iteraties</label>
+                <input type="number" name="max_iter" value="{{ agent.max_iter }}" min="1" max="200"
+                       class="w-32 text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="checkbox" name="is_manager" id="edit-manager-{{ agent.pk }}" {% if agent.is_manager %}checked{% endif %}
+                       class="rounded border-gray-300 text-purple-600 focus:ring-purple-500 w-4 h-4"
+                       onchange="(function(cb){
+                           var sel=document.getElementById('tools-select-{{ agent.pk }}');
+                           var hint=document.getElementById('tools-hint-{{ agent.pk }}');
+                           var ts=sel.tomselect;
+                           if(cb.checked){if(ts){ts.clear();ts.disable()}else{sel.disabled=true}hint.classList.remove('hidden')}
+                           else{if(ts){ts.enable()}else{sel.disabled=false}hint.classList.add('hidden')}
+                       })(this)">
+                <label for="edit-manager-{{ agent.pk }}" class="text-xs font-medium text-gray-600">Hoofdagent (manager)</label>
+            </div>
+        </div>
+    </div>
+    <div class="flex justify-end gap-2">
+        <button type="button" onclick="document.getElementById('edit-agent-{{ agent.pk }}').classList.add('hidden')"
+                class="px-3 py-1.5 text-gray-500 text-sm rounded-lg hover:bg-gray-200 transition-colors">Annuleren</button>
+        <button type="submit" class="px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">Opslaan</button>
+    </div>
+</form>

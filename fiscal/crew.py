@@ -28,14 +28,16 @@ def create_crew(step_callback=None, task_callback=None) -> Crew:
     tasks_config = _load_yaml("tasks.yaml")
 
     # Pro model for quality reviewer (needs accuracy)
+    reviewer_model = os.environ.get("CREW_MANAGER_MODEL", "gemini-3.1-pro-preview")
     reviewer_llm = LLM(
-        model="gemini/gemini-3.1-pro-preview",
+        model=f"gemini/{reviewer_model}",
         api_key=os.environ.get("GEMINI_API_KEY", ""),
     )
 
     # Flash model for other agents (speed + cost)
+    task_model = os.environ.get("CREW_TASK_MODEL", "gemini-3.1-flash-lite-preview")
     task_llm = LLM(
-        model="gemini/gemini-3-flash-preview",
+        model=f"gemini/{task_model}",
         api_key=os.environ.get("GEMINI_API_KEY", ""),
     )
 

@@ -1,0 +1,183 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}{{ opdracht.client_naam }} — Samenstelopdracht{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav class="flex items-center gap-2 text-sm text-gray-500 mb-6">
+    <a href="{% url 'samenstellen:home' %}" class="hover:text-teal-600 transition-colors">Samenstelopdracht</a>
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+    <span class="text-gray-900 font-medium">{{ opdracht.client_naam }}</span>
+</nav>
+
+<!-- Client header -->
+<div class="bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm mb-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">{{ opdracht.client_naam }}</h1>
+            <div class="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                <span>Boekjaar {{ opdracht.boekjaar }}</span>
+                <span>&middot;</span>
+                <span>{{ opdracht.rechtsvorm }}</span>
+                {% if opdracht.sector %}
+                <span>&middot;</span>
+                <span>{{ opdracht.sector }}</span>
+                {% endif %}
+                <span>&middot;</span>
+                <span>{{ opdracht.verslaggevingsstelsel }}</span>
+            </div>
+        </div>
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+            {% if opdracht.status == 'afgerond' %}bg-emerald-100 text-emerald-800
+            {% elif opdracht.status == 'run1_bezig' or opdracht.status == 'run2_bezig' %}bg-blue-100 text-blue-800
+            {% elif opdracht.status == 'run1_klaar' %}bg-amber-100 text-amber-800
+            {% else %}bg-gray-100 text-gray-800{% endif %}">
+            {{ opdracht.get_status_display }}
+        </span>
+    </div>
+</div>
+
+<!-- Fase stepper -->
+<div class="bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm mb-6">
+    <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Fasen</h2>
+
+    <!-- Run 1 -->
+    <div class="mb-6">
+        <p class="text-xs font-medium text-gray-500 mb-3">Run 1 — Analyse</p>
+        <div class="flex items-start gap-2 overflow-x-auto pb-2">
+            {% for item in fasen_met_status %}
+            {% if item.fase.run_nummer == 1 %}
+            <div class="flex items-center gap-2 {% if not forloop.first %}{% endif %}">
+                {% if not forloop.first and item.fase.run_nummer == 1 %}
+                <svg class="w-5 h-5 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                {% endif %}
+                <div class="flex-shrink-0 w-36 rounded-xl border-2 p-3 text-center transition-all
+                    {% if item.status == 'completed' %}border-teal-500 bg-teal-50
+                    {% elif item.status == 'running' %}border-teal-400 bg-teal-50 animate-pulse
+                    {% elif item.status == 'failed' %}border-red-300 bg-red-50
+                    {% else %}border-gray-200 bg-gray-50{% endif %}">
+                    {% if item.status == 'completed' %}
+                    <svg class="w-5 h-5 text-teal-600 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    {% elif item.status == 'running' %}
+                    <svg class="animate-spin w-5 h-5 text-teal-600 mx-auto mb-1" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    {% elif item.status == 'failed' %}
+                    <svg class="w-5 h-5 text-red-500 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    {% else %}
+                    <div class="w-5 h-5 rounded-full border-2 border-gray-300 mx-auto mb-1"></div>
+                    {% endif %}
+                    <p class="text-xs font-semibold {% if item.status == 'completed' %}text-teal-700{% elif item.status == 'running' %}text-teal-600{% elif item.status == 'failed' %}text-red-600{% else %}text-gray-500{% endif %}">
+                        {{ item.fase.naam }}
+                    </p>
+                    {% if item.fase.team %}
+                    <p class="text-xs text-gray-400 mt-0.5 truncate">{{ item.fase.team.name }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Run 2 -->
+    <div>
+        <p class="text-xs font-medium text-gray-500 mb-3">Run 2 — Afsluiting</p>
+        <div class="flex items-start gap-2 overflow-x-auto pb-2">
+            {% for item in fasen_met_status %}
+            {% if item.fase.run_nummer == 2 %}
+            <div class="flex items-center gap-2">
+                {% if not forloop.first %}
+                <svg class="w-5 h-5 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                {% endif %}
+                <div class="flex-shrink-0 w-36 rounded-xl border-2 p-3 text-center transition-all
+                    {% if item.status == 'completed' %}border-teal-500 bg-teal-50
+                    {% elif item.status == 'running' %}border-teal-400 bg-teal-50 animate-pulse
+                    {% elif item.status == 'failed' %}border-red-300 bg-red-50
+                    {% else %}border-gray-200 bg-gray-50{% endif %}">
+                    {% if item.status == 'completed' %}
+                    <svg class="w-5 h-5 text-teal-600 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    {% elif item.status == 'running' %}
+                    <svg class="animate-spin w-5 h-5 text-teal-600 mx-auto mb-1" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    {% else %}
+                    <div class="w-5 h-5 rounded-full border-2 border-gray-300 mx-auto mb-1"></div>
+                    {% endif %}
+                    <p class="text-xs font-semibold {% if item.status == 'completed' %}text-teal-700{% elif item.status == 'running' %}text-teal-600{% else %}text-gray-500{% endif %}">
+                        {{ item.fase.naam }}
+                    </p>
+                    {% if item.fase.team %}
+                    <p class="text-xs text-gray-400 mt-0.5 truncate">{{ item.fase.team.name }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Fase resultaten -->
+{% for item in fasen_met_status %}
+{% if item.resultaat and item.resultaat.status == 'completed' %}
+<details class="bg-white rounded-xl border border-gray-200/60 shadow-sm mb-3 overflow-hidden">
+    <summary class="px-5 py-3 cursor-pointer hover:bg-gray-50 flex items-center justify-between select-none">
+        <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span class="text-sm font-semibold text-gray-900">{{ item.fase.naam }}</span>
+        </div>
+        <span class="text-xs text-gray-400">{{ item.resultaat.completed_at|timesince }} geleden</span>
+    </summary>
+    <div class="px-5 pb-4 border-t border-gray-100">
+        <pre class="mt-3 bg-gray-50 rounded-lg p-4 text-xs text-gray-700 whitespace-pre-wrap overflow-x-auto max-h-96">{{ item.resultaat.resultaat }}</pre>
+        {% if item.documenten %}
+        <div class="mt-3">
+            <p class="text-xs font-medium text-gray-500 mb-1">Documenten</p>
+            {% for doc in item.documenten %}
+            <div class="flex items-center justify-between py-1">
+                <span class="text-xs text-gray-600">{{ doc.naam }}</span>
+                <form method="post" action="{% url 'samenstellen:document_delete' opdracht.pk doc.pk %}"
+                      data-confirm="Document '{{ doc.naam }}' verwijderen?">
+                    {% csrf_token %}
+                    <button class="text-xs text-red-400 hover:text-red-600">Verwijder</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</details>
+{% endif %}
+{% endfor %}
+
+<!-- Documenten upload -->
+<div id="documenten-area" class="mb-6">
+    {% include "samenstellen/_documenten.html" %}
+</div>
+
+<!-- Run section -->
+<div id="run-section">
+    {% include "samenstellen/_status.html" %}
+</div>
+
+<!-- Danger zone -->
+<div class="mt-12 border border-red-200 rounded-xl p-6">
+    <h3 class="text-sm font-semibold text-red-700 uppercase tracking-wide mb-3">Danger zone</h3>
+    <div class="flex items-center justify-between">
+        <div>
+            <p class="text-sm text-gray-700 font-medium">Opdracht verwijderen</p>
+            <p class="text-xs text-gray-500">Dit verwijdert de opdracht, alle resultaten en documenten permanent.</p>
+        </div>
+        <form method="post" action="{% url 'samenstellen:opdracht_delete' opdracht.pk %}"
+              data-confirm="Weet je zeker dat je deze samenstelopdracht wilt verwijderen?">
+            {% csrf_token %}
+            <button type="submit" class="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
+                Verwijderen
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

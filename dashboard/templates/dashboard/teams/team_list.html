@@ -31,13 +31,48 @@
 <!-- Teams Grid -->
 <div class="mb-6 flex items-center justify-between">
     <h2 class="text-lg font-semibold text-gray-900">Alle Teams</h2>
-    <button onclick="document.getElementById('new-team-form').classList.toggle('hidden')"
-            class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-        </svg>
-        Nieuw Team
-    </button>
+    <div class="flex items-center gap-2">
+        <!-- Selectie-modus knoppen -->
+        <button id="btn-select-mode" onclick="toggleSelectMode(true)"
+                class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+            </svg>
+            Selecteren
+        </button>
+        <button onclick="document.getElementById('new-team-form').classList.toggle('hidden')"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Nieuw Team
+        </button>
+    </div>
+</div>
+
+<!-- Selectie-actiebalk -->
+<div id="select-bar" class="hidden mb-4 bg-red-50 border border-red-200 rounded-xl p-3 flex items-center justify-between animate-slide-down">
+    <div class="flex items-center gap-3">
+        <span class="text-sm text-gray-700"><span id="select-count" class="font-semibold text-red-700">0</span> geselecteerd</span>
+        <button onclick="selectAll()" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Alles selecteren</button>
+        <button onclick="deselectAll()" class="text-xs text-gray-500 hover:text-gray-700 font-medium">Deselecteren</button>
+    </div>
+    <div class="flex items-center gap-2">
+        <button onclick="toggleSelectMode(false)" class="px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            Annuleren
+        </button>
+        <form id="bulk-delete-form" method="post" action="{% url 'dashboard:team_bulk_delete' %}">
+            {% csrf_token %}
+            <div id="bulk-delete-slugs"></div>
+            <button type="submit" id="btn-bulk-delete" disabled
+                    class="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-100 border border-red-200 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                Verwijderen
+            </button>
+        </form>
+    </div>
 </div>
 
 <!-- Inline new team form -->
@@ -62,7 +97,12 @@
 {% if teams %}
 <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
     {% for team in teams %}
-    <a href="{% url 'dashboard:team_detail' team.slug %}" class="group block bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all overflow-hidden">
+    <div class="relative group">
+        <!-- Checkbox overlay (hidden by default) -->
+        <label class="team-checkbox absolute top-3 left-3 z-10 hidden cursor-pointer">
+            <input type="checkbox" value="{{ team.slug }}" class="team-select-cb w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500" onchange="updateSelectCount()">
+        </label>
+    <a href="{% url 'dashboard:team_detail' team.slug %}" class="block bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all overflow-hidden team-card">
         <div class="p-5">
             <div class="flex items-start justify-between mb-3">
                 <h3 class="font-semibold text-gray-900 group-hover:text-indigo-700 transition-colors">{{ team.name }}</h3>
@@ -89,6 +129,7 @@
             <span class="text-sm font-medium text-indigo-600 group-hover:text-indigo-700">Beheer &rarr;</span>
         </div>
     </a>
+    </div>
     {% endfor %}
 </div>
 {% else %}
@@ -100,4 +141,88 @@
     <p class="text-sm text-gray-400">Maak je eerste AI-team om te beginnen</p>
 </div>
 {% endif %}
+
+<script>
+var selectMode = false;
+
+function toggleSelectMode(on) {
+    selectMode = on;
+    document.getElementById('select-bar').classList.toggle('hidden', !on);
+    document.getElementById('btn-select-mode').classList.toggle('hidden', on);
+    document.querySelectorAll('.team-checkbox').forEach(function(el) {
+        el.classList.toggle('hidden', !on);
+    });
+    document.querySelectorAll('.team-card').forEach(function(el) {
+        if (on) {
+            el.style.pointerEvents = 'none';
+            el.classList.add('opacity-80');
+        } else {
+            el.style.pointerEvents = '';
+            el.classList.remove('opacity-80');
+        }
+    });
+    if (!on) deselectAll();
+}
+
+function updateSelectCount() {
+    var checked = document.querySelectorAll('.team-select-cb:checked');
+    document.getElementById('select-count').textContent = checked.length;
+    document.getElementById('btn-bulk-delete').disabled = checked.length === 0;
+
+    // Update border highlight
+    document.querySelectorAll('.team-select-cb').forEach(function(cb) {
+        var card = cb.closest('.relative').querySelector('.team-card');
+        if (cb.checked) {
+            card.classList.add('border-red-300', 'bg-red-50/50');
+        } else {
+            card.classList.remove('border-red-300', 'bg-red-50/50');
+        }
+    });
+}
+
+function selectAll() {
+    document.querySelectorAll('.team-select-cb').forEach(function(cb) { cb.checked = true; });
+    updateSelectCount();
+}
+
+function deselectAll() {
+    document.querySelectorAll('.team-select-cb').forEach(function(cb) { cb.checked = false; });
+    updateSelectCount();
+}
+
+// Intercept bulk delete form submit for confirmation
+document.getElementById('bulk-delete-form')?.addEventListener('submit', function(e) {
+    var checked = document.querySelectorAll('.team-select-cb:checked');
+    if (checked.length === 0) { e.preventDefault(); return; }
+
+    // Build hidden inputs
+    var container = document.getElementById('bulk-delete-slugs');
+    container.innerHTML = '';
+    checked.forEach(function(cb) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'slugs';
+        input.value = cb.value;
+        container.appendChild(input);
+    });
+
+    // Show confirmation modal
+    if (!this._confirmed) {
+        e.preventDefault();
+        var form = this;
+        var n = checked.length;
+        showModal({
+            title: 'Teams verwijderen',
+            message: 'Weet je zeker dat je ' + n + ' team' + (n > 1 ? 's' : '') + ' wilt verwijderen? Dit kan niet ongedaan worden gemaakt.',
+            variant: 'danger',
+            onConfirm: function() {
+                form._confirmed = true;
+                form.submit();
+            }
+        });
+    } else {
+        this._confirmed = false;
+    }
+});
+</script>
 {% endblock %}

@@ -17,7 +17,7 @@
 </div>
 
 <!-- Variables Section -->
-<div id="variables-area" class="mt-8">
+<div class="mt-8">
     {% include "dashboard/teams/_variables.html" %}
 </div>
 
@@ -31,48 +31,57 @@
     {% include "dashboard/teams/_run_status.html" %}
 </div>
 
-<!-- Danger Zone -->
-<div class="mt-12 border border-red-200 rounded-xl p-6">
-    <h3 class="text-sm font-semibold text-red-700 uppercase tracking-wide mb-3">Danger zone</h3>
-    <div class="flex items-center justify-between">
-        <div>
-            <p class="text-sm text-gray-700 font-medium">Team verwijderen</p>
-            <p class="text-xs text-gray-500">Dit verwijdert het team en alle bijbehorende agents, taken en variabelen permanent.</p>
-        </div>
-        <form method="post" action="{% url 'dashboard:team_delete' team.slug %}" data-confirm="Weet je zeker dat je dit team wilt verwijderen? Dit kan niet ongedaan worden gemaakt.">
-            {% csrf_token %}
-            <button type="submit" class="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
-                Team verwijderen
-            </button>
-        </form>
-    </div>
-</div>
-
-<!-- Suggested models datalists for JS model switching -->
-<datalist id="models-gemini">
-    {% for m in suggested_models.gemini %}<option value="{{ m }}">{% endfor %}
-</datalist>
-<datalist id="models-anthropic">
-    {% for m in suggested_models.anthropic %}<option value="{{ m }}">{% endfor %}
-</datalist>
-<datalist id="models-openai">
-    {% for m in suggested_models.openai %}<option value="{{ m }}">{% endfor %}
-</datalist>
 
 <script>
-function switchModelList(selectEl, inputId) {
-    var provider = selectEl.value;
-    var input = document.getElementById(inputId);
-    if (input) {
-        input.setAttribute('list', 'models-' + provider);
-        // Set a sensible default
-        var defaults = {
-            'gemini': 'gemini-3-flash-preview',
-            'anthropic': 'claude-sonnet-4-6',
-            'openai': 'gpt-4o'
-        };
-        if (defaults[provider]) input.value = defaults[provider];
+function initProviderModelLink(providerSelectId, modelSelectId) {
+    var providerEl = document.getElementById(providerSelectId);
+    var modelEl = document.getElementById(modelSelectId);
+    if (!providerEl || !modelEl) return;
+    // Skip if already initialized
+    if (providerEl.dataset.pmLinked) return;
+    providerEl.dataset.pmLinked = '1';
+
+    function filterModels(provider) {
+        // Destroy model Tom Select if active
+        if (modelEl.tomselect) {
+            try { modelEl.tomselect.destroy(); } catch(e) {}
+        }
+        // Filter options by provider
+        var firstMatch = null;
+        modelEl.querySelectorAll('option').forEach(function(opt) {
+            if (opt.dataset.provider === provider) {
+                opt.hidden = false; opt.disabled = false;
+                if (!firstMatch) firstMatch = opt;
+            } else {
+                opt.hidden = true; opt.disabled = true; opt.selected = false;
+            }
+        });
+        if (firstMatch) firstMatch.selected = true;
+        // Re-init model as Tom Select
+        if (typeof TomSelect !== 'undefined') {
+            new TomSelect(modelEl, { create: false, allowEmptyOption: true });
+        }
     }
+
+    // Init provider as Tom Select with onChange callback
+    if (typeof TomSelect !== 'undefined') {
+        new TomSelect(providerEl, {
+            create: false,
+            onChange: function(provider) { filterModels(provider); }
+        });
+    }
+    // Init model Tom Select (with current provider filter)
+    filterModels(providerEl.value);
 }
+
+// Initialize on page load and after HTMX swaps
+function initAllProviderModelLinks() {
+    document.querySelectorAll('[data-provider-select]').forEach(function(el) {
+        var modelId = el.dataset.providerSelect;
+        initProviderModelLink(el.id, modelId);
+    });
+}
+document.addEventListener('DOMContentLoaded', initAllProviderModelLinks);
+document.addEventListener('htmx:afterSettle', initAllProviderModelLinks);
 </script>
 {% endblock %}

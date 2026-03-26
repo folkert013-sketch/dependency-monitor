@@ -68,14 +68,18 @@ def test_connection_from_settings(es):
 
     token = _get_token(tenant_id, client_id, client_secret)
 
-    # Verify mailbox access
+    # Non-destructive check: verify mailbox access without sending an email
     resp = requests.get(
-        f"https://graph.microsoft.com/v1.0/users/{user_id}/mailFolders/inbox",
+        f"https://graph.microsoft.com/v1.0/users/{user_id}/mailFolders/Inbox",
         headers={"Authorization": f"Bearer {token}"},
-        timeout=15,
+        timeout=10,
     )
+    if resp.status_code == 401:
+        raise RuntimeError("Token ongeldig of verlopen. Controleer de Graph API credentials.")
+    if resp.status_code == 403:
+        raise RuntimeError("Onvoldoende rechten. Zorg dat de app Mail.Read of Mail.ReadBasic permissie heeft.")
     if resp.status_code != 200:
-        raise RuntimeError(f"Mailbox toegang mislukt ({resp.status_code}): {resp.text[:200]}")
+        raise RuntimeError(f"Mailbox check mislukt (HTTP {resp.status_code}). Controleer het e-mailadres en de API instellingen.")
 
 
 def _send_via_graph(
@@ -124,4 +128,8 @@ def _send_via_graph(
     )
 
     if resp.status_code not in (200, 202):
-        raise RuntimeError(f"Graph API sendMail failed ({resp.status_code}): {resp.text[:300]}")
+        logger.error("Graph API sendMail failed (status %s)", resp.status_code)
+        raise RuntimeError(
+            f"Graph API sendMail mislukt (HTTP {resp.status_code}). "
+            "Controleer de Graph API credentials en permissies."
+        )

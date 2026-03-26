@@ -1,5 +1,11 @@
+{% load report_filters %}
 <tr id="prospect-row-{{ prospect.slug }}"
     data-status="{{ prospect.status }}"
+    data-name="{{ prospect.name|lower }}"
+    data-contact="{{ prospect.contact_first_name|lower }} {{ prospect.contact_last_name|lower }}"
+    data-email="{{ prospect.email|lower }}"
+    data-template="{{ prospect.assigned_template.name|lower|default:'' }}"
+    data-search="{{ prospect.name|lower }} {{ prospect.contact_first_name|lower }} {{ prospect.contact_last_name|lower }} {{ prospect.email|lower }} {{ prospect.phone }} {{ prospect.website|lower }} {{ prospect.address|lower }}"
     hx-get="{% url 'dashboard:htmx_prospect_popup' prospect.slug %}"
     hx-target="#modal-container"
     hx-swap="innerHTML"
@@ -14,22 +20,29 @@
     <td class="px-5 py-3 text-gray-500 hidden md:table-cell">
         {% if prospect.contact_first_name or prospect.contact_last_name %}
         {{ prospect.contact_first_name }} {{ prospect.contact_last_name }}
-        {% else %}—{% endif %}
+        {% else %}<span class="text-gray-300">&mdash;</span>{% endif %}
     </td>
-    <td class="px-5 py-3 text-gray-500 hidden md:table-cell">
+    <td class="px-5 py-3 hidden md:table-cell">
         {% if prospect.email %}
-        <span class="truncate block max-w-[200px]" title="{{ prospect.email }}">{{ prospect.email }}</span>
-        {% else %}—{% endif %}
+        <span class="truncate block max-w-[200px] text-gray-500" title="{{ prospect.email }}">{{ prospect.email }}</span>
+        {% else %}<span class="text-gray-300">&mdash;</span>{% endif %}
     </td>
     <td class="px-5 py-3 text-gray-500 hidden lg:table-cell">
-        {% if prospect.phone %}{{ prospect.phone }}{% else %}—{% endif %}
+        {% if prospect.phone %}<div>{{ prospect.phone }}</div>{% endif %}
+        {% if prospect.website %}<a href="{{ prospect.website|ensure_url }}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-indigo-600 hover:text-indigo-800 hover:underline text-sm truncate block max-w-[180px]" title="{{ prospect.website }}">{{ prospect.website }}</a>{% endif %}
+        {% if not prospect.phone and not prospect.website %}<span class="text-gray-300">&mdash;</span>{% endif %}
     </td>
-    <td class="px-5 py-3 text-gray-500 hidden lg:table-cell" onclick="event.stopPropagation()">
-        {% if prospect.website %}
-        <a href="{{ prospect.website }}" target="_blank" class="text-indigo-600 hover:text-indigo-800 hover:underline truncate block max-w-[180px]" title="{{ prospect.website }}">{{ prospect.website }}</a>
-        {% else %}—{% endif %}
+    <td class="px-5 py-3 hidden lg:table-cell">
+        {% if prospect.aanhef %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">{{ prospect.aanhef }}</span>
+        {% else %}<span class="text-gray-300">&mdash;</span>{% endif %}
     </td>
-    <td class="px-5 py-3">
+    <td class="px-5 py-3 hidden lg:table-cell">
+        {% if prospect.assigned_template %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 max-w-[160px] truncate" title="{{ prospect.assigned_template.name }}">{{ prospect.assigned_template.name }}</span>
+        {% else %}<span class="text-gray-300">&mdash;</span>{% endif %}
+    </td>
+    <td class="px-5 py-3 whitespace-nowrap">
         {% if prospect.status == "new" %}
         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Nieuw</span>
         {% elif prospect.status == "not_contacted" %}
@@ -43,12 +56,23 @@
         {% elif prospect.status == "client" %}
         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">Klant</span>
         {% endif %}
+        {% if prospect.contact_channel %}
+        <div class="text-xs text-gray-400 mt-0.5">{{ prospect.get_contact_channel_display }}</div>
+        {% endif %}
     </td>
-    <td class="px-5 py-3 text-gray-500 hidden lg:table-cell">
-        {% with last_response=prospect.responses.all.0 %}
-        {% if last_response and last_response.sent_at %}
-        <span class="text-xs" title="{{ last_response.sent_at|date:'d M Y H:i' }}">{{ last_response.sent_at|date:"d M Y" }}</span>
-        {% else %}—{% endif %}
-        {% endwith %}
+    <td class="px-5 py-3 hidden lg:table-cell whitespace-nowrap">
+        {% if prospect.email and prospect.aanhef and prospect.assigned_template %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700" title="E-mail, aanhef en template zijn ingevuld">Gereed</span>
+        {% elif prospect.email or prospect.aanhef or prospect.assigned_template %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700" title="Niet alle velden zijn ingevuld">Deels</span>
+        {% else %}
+        <span class="text-gray-300">&mdash;</span>
+        {% endif %}
+        {% if prospect.contacted_at %}
+        <div class="text-xs text-gray-400 mt-1">Benaderd {{ prospect.contacted_at|date:"d-m-Y" }}</div>
+        {% endif %}
+        {% if prospect.last_sent_at %}
+        <div class="text-xs text-gray-400">Verstuurd {{ prospect.last_sent_at|date:"d-m-Y" }}</div>
+        {% endif %}
     </td>
 </tr>

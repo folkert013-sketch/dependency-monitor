@@ -27,13 +27,6 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
             Bewerken
         </a>
-        <form method="post" action="{% url 'dashboard:prospect_group_delete' group.slug %}" data-confirm="Weet je zeker dat je deze groep wilt verwijderen?">
-            {% csrf_token %}
-            <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-white text-sm font-medium text-red-600 rounded-xl border border-red-200 hover:bg-red-50 shadow-sm transition-all">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                Verwijderen
-            </button>
-        </form>
     </div>
 </div>
 
@@ -49,7 +42,7 @@
         <form hx-post="{% url 'dashboard:htmx_prospect_manual_add' %}"
               hx-target="#prospect-table-body"
               hx-swap="afterbegin"
-              hx-on:htmx:after-request="if(event.detail.successful && event.detail.elt === this) { this.reset(); document.getElementById('duplicate-results').innerHTML=''; var es=document.getElementById('empty-state'); if(es) es.remove(); }">
+              hx-on:htmx:after-request="if(event.detail.successful && event.detail.elt === this) { this.reset(); this.querySelectorAll('.tomselected').forEach(function(el){ if(el.tomselect) el.tomselect.setValue(el.value, true); }); document.getElementById('duplicate-results').innerHTML=''; var es=document.getElementById('empty-state'); if(es) es.remove(); }">
             {% csrf_token %}
             <input type="hidden" name="group_slug" value="{{ group.slug }}">
             <div class="grid sm:grid-cols-2 gap-4">
@@ -57,7 +50,7 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">Bedrijfsnaam *</label>
                     <input type="text" name="name" required minlength="2"
                            hx-post="{% url 'dashboard:htmx_prospect_check_duplicate' %}"
-                           hx-trigger="keyup changed delay:300ms"
+                           hx-trigger="input delay:300ms"
                            hx-target="#duplicate-results"
                            hx-include="[name='group_slug']"
                            class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
@@ -90,12 +83,51 @@
                         <option value="">—</option>
                         <option value="Geachte heer">Geachte heer</option>
                         <option value="Geachte mevrouw">Geachte mevrouw</option>
+                        <option value="Geachte heer/mevrouw">Geachte heer/mevrouw</option>
                         <option value="Beste">Beste</option>
                     </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Website</label>
                     <input type="text" name="website" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="www.voorbeeld.nl">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">LinkedIn</label>
+                    <input type="text" name="linkedin_url" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="linkedin.com/company/...">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Template</label>
+                    <select name="assigned_template" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <option value="">—</option>
+                        {% for tpl in response_templates %}
+                        <option value="{{ tpl.pk }}">{{ tpl.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select name="status" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <option value="new" selected>Nieuw</option>
+                        <option value="not_contacted">Niet benaderd</option>
+                        <option value="contacted">Benaderd</option>
+                        <option value="interested">Geïnteresseerd</option>
+                        <option value="not_interested">Geen interesse</option>
+                        <option value="client">Klant</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Contactkanaal</label>
+                    <select name="contact_channel" class="w-full rounded-xl border-gray-200 text-sm px-4 py-2.5 shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <option value="">—</option>
+                        <option value="linkedin">LinkedIn</option>
+                        <option value="phone">Telefoon</option>
+                        <option value="email">E-mail</option>
+                        <option value="contact_form">Contactformulier</option>
+                        <option value="post">Post</option>
+                        <option value="visit">Bezoek</option>
+                        <option value="paid_ads">Betaalde reclame</option>
+                        <option value="other">Anders</option>
+                    </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Notities</label>
@@ -112,9 +144,16 @@
     </div>
 </div>
 
-<!-- Status filter -->
-<div class="mb-4">
-    <select id="status-filter" onchange="filterProspects(this.value)" class="rounded-xl border-gray-200 text-sm px-4 py-2.5 bg-white shadow-sm border">
+<!-- Filter bar -->
+<div class="mb-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+    <div class="relative w-full sm:w-72">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input type="text" id="prospect-search" placeholder="Zoek op naam, e-mail, telefoon..."
+               class="w-full pl-10 pr-4 py-2.5 rounded-xl border-gray-200 text-sm shadow-sm border focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+    </div>
+    <select id="status-filter" onchange="filterProspects()" class="rounded-xl border-gray-200 text-sm px-4 py-2.5 bg-white shadow-sm border">
         <option value="">Alle statussen</option>
         <option value="new">Nieuw</option>
         <option value="not_contacted">Niet benaderd</option>
@@ -123,6 +162,7 @@
         <option value="not_interested">Geen interesse</option>
         <option value="client">Klant</option>
     </select>
+    <span id="prospect-count" class="text-sm text-gray-500 ml-auto"></span>
 </div>
 
 <!-- Bulk action toolbar -->
@@ -150,6 +190,13 @@
                 <option value="paid_ads">Betaalde reclame</option>
                 <option value="other">Anders</option>
             </select>
+            <select id="bulk-aanhef" class="rounded-xl border-gray-200 text-sm px-3 py-2 bg-white shadow-sm border">
+                <option value="">Aanhef wijzigen...</option>
+                <option value="Geachte heer">Geachte heer</option>
+                <option value="Geachte mevrouw">Geachte mevrouw</option>
+                <option value="Geachte heer/mevrouw">Geachte heer/mevrouw</option>
+                <option value="Beste">Beste</option>
+            </select>
             <select id="bulk-template" class="rounded-xl border-gray-200 text-sm px-3 py-2 bg-white shadow-sm border">
                 <option value="">Template toewijzen...</option>
                 {% for tpl in response_templates %}
@@ -171,6 +218,13 @@
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                 E-mail versturen
             </button>
+            <button
+                type="button"
+                onclick="applyBulkDelete()"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 shadow-sm transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                Verwijderen
+            </button>
         </div>
     </div>
 </div>
@@ -180,12 +234,13 @@
       hx-post="{% url 'dashboard:htmx_prospect_bulk_update' %}"
       hx-target="#prospect-table-body"
       hx-swap="innerHTML"
-      hx-on:htmx:after-request="if(event.detail.successful) { var bs=document.getElementById('bulk-status'); if(bs.tomselect) bs.tomselect.setValue(''); var bc=document.getElementById('bulk-channel'); if(bc.tomselect) bc.tomselect.setValue(''); var bt=document.getElementById('bulk-template'); if(bt.tomselect) bt.tomselect.setValue(''); document.querySelectorAll('.bulk-select-cb').forEach(function(cb){cb.checked=false}); document.getElementById('select-all-cb').checked=false; updateBulkToolbar(); var sf=document.getElementById('status-filter'); if(sf &amp;&amp; sf.value) filterProspects(sf.value); }"
+      hx-on:htmx:after-request="if(event.detail.successful) { var bs=document.getElementById('bulk-status'); if(bs.tomselect) bs.tomselect.setValue(''); var bc=document.getElementById('bulk-channel'); if(bc.tomselect) bc.tomselect.setValue(''); var ba=document.getElementById('bulk-aanhef'); if(ba.tomselect) ba.tomselect.setValue(''); var bt=document.getElementById('bulk-template'); if(bt.tomselect) bt.tomselect.setValue(''); document.querySelectorAll('.bulk-select-cb').forEach(function(cb){cb.checked=false}); document.getElementById('select-all-cb').checked=false; updateBulkToolbar(); var sf=document.getElementById('status-filter'); if(sf &amp;&amp; sf.value) filterProspects(sf.value); }"
       style="display:none;">
     {% csrf_token %}
     <input type="hidden" name="group_slug" value="{{ group.slug }}">
     <input type="hidden" id="bulk-hidden-status" name="status" value="">
     <input type="hidden" id="bulk-hidden-channel" name="contact_channel" value="">
+    <input type="hidden" id="bulk-hidden-aanhef" name="aanhef" value="">
     <input type="hidden" id="bulk-hidden-template" name="template_id" value="">
     <div id="bulk-slugs-container"></div>
 </form>
@@ -198,21 +253,44 @@
     <div id="bulk-email-slugs-container"></div>
 </form>
 
+<!-- Hidden bulk delete form (submitted via htmx) -->
+<form id="bulk-delete-form"
+      hx-post="{% url 'dashboard:htmx_prospect_bulk_delete' %}"
+      hx-target="#prospect-table-body"
+      hx-swap="innerHTML"
+      hx-on:htmx:after-request="if(event.detail.successful) { document.querySelectorAll('.bulk-select-cb').forEach(function(cb){cb.checked=false}); document.getElementById('select-all-cb').checked=false; updateBulkToolbar(); var sf=document.getElementById('status-filter'); if(sf &amp;&amp; sf.value) filterProspects(sf.value); }"
+      style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" name="group_slug" value="{{ group.slug }}">
+    <div id="bulk-delete-slugs-container"></div>
+</form>
+
 <!-- Prospect table -->
-<div class="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+<div class="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-x-auto">
     <table class="w-full text-sm">
         <thead>
             <tr class="border-b border-gray-100 bg-gray-50/50">
                 <th class="px-2 py-3 w-10">
                     <input type="checkbox" id="select-all-cb" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" onchange="toggleSelectAll(this.checked)">
                 </th>
-                <th class="text-left px-5 py-3 font-medium text-gray-500">Bedrijfsnaam</th>
-                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden md:table-cell">Contactpersoon</th>
-                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden md:table-cell">E-mail</th>
-                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden lg:table-cell">Telefoon</th>
-                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden lg:table-cell">Website</th>
-                <th class="text-left px-5 py-3 font-medium text-gray-500">Status</th>
-                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden lg:table-cell">Gemaild op</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 cursor-pointer select-none hover:text-indigo-600 transition-colors group" onclick="sortTable('name')">
+                    <span class="inline-flex items-center gap-1">Bedrijfsnaam<span class="sort-indicator opacity-0 group-hover:opacity-50 transition-opacity" data-sort-col="name"><svg class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg></span></span>
+                </th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden md:table-cell cursor-pointer select-none hover:text-indigo-600 transition-colors group" onclick="sortTable('contact')">
+                    <span class="inline-flex items-center gap-1">Contactpersoon<span class="sort-indicator opacity-0 group-hover:opacity-50 transition-opacity" data-sort-col="contact"><svg class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg></span></span>
+                </th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden md:table-cell cursor-pointer select-none hover:text-indigo-600 transition-colors group" onclick="sortTable('email')">
+                    <span class="inline-flex items-center gap-1">E-mail<span class="sort-indicator opacity-0 group-hover:opacity-50 transition-opacity" data-sort-col="email"><svg class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg></span></span>
+                </th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden lg:table-cell">Tel / Website</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden lg:table-cell">Aanhef</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden lg:table-cell cursor-pointer select-none hover:text-indigo-600 transition-colors group" onclick="sortTable('template')">
+                    <span class="inline-flex items-center gap-1">Template<span class="sort-indicator opacity-0 group-hover:opacity-50 transition-opacity" data-sort-col="template"><svg class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg></span></span>
+                </th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 cursor-pointer select-none hover:text-indigo-600 transition-colors group" onclick="sortTable('status')">
+                    <span class="inline-flex items-center gap-1">Status<span class="sort-indicator opacity-0 group-hover:opacity-50 transition-opacity" data-sort-col="status"><svg class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg></span></span>
+                </th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500 hidden lg:table-cell">Mail</th>
             </tr>
         </thead>
         <tbody id="prospect-table-body">
@@ -233,13 +311,92 @@
 <div id="modal-container"></div>
 
 <script>
-function filterProspects(status) {
+var currentSortColumn = '';
+var currentSortDirection = 'asc';
+var searchQuery = '';
+
+function filterProspects() {
+    var statusFilter = document.getElementById('status-filter').value;
     var rows = document.querySelectorAll('#prospect-table-body tr[data-status]');
+    var visible = 0;
+    var total = rows.length;
+
     rows.forEach(function(row) {
-        if (!status || row.dataset.status === status) {
+        var matchStatus = !statusFilter || row.dataset.status === statusFilter;
+        var matchSearch = !searchQuery || row.dataset.search.indexOf(searchQuery) !== -1;
+
+        if (matchStatus && matchSearch) {
             row.style.display = '';
+            visible++;
         } else {
             row.style.display = 'none';
+        }
+    });
+
+    var countEl = document.getElementById('prospect-count');
+    if (countEl) {
+        if (searchQuery || statusFilter) {
+            countEl.textContent = visible + ' van ' + total + ' prospects';
+        } else {
+            countEl.textContent = total + ' prospects';
+        }
+    }
+
+    updateBulkToolbar();
+}
+
+document.getElementById('prospect-search').addEventListener('input', function(e) {
+    searchQuery = e.target.value.toLowerCase().trim();
+    filterProspects();
+});
+
+function sortTable(column) {
+    if (currentSortColumn === column) {
+        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSortColumn = column;
+        currentSortDirection = 'asc';
+    }
+
+    applySortToDOM();
+    updateSortIndicators();
+    filterProspects();
+}
+
+function applySortToDOM() {
+    var tbody = document.getElementById('prospect-table-body');
+    var rows = Array.from(tbody.querySelectorAll('tr[data-status]'));
+    var col = currentSortColumn;
+    var dir = currentSortDirection;
+
+    rows.sort(function(a, b) {
+        var valA = (a.dataset[col] || '').trim();
+        var valB = (b.dataset[col] || '').trim();
+
+        if (!valA && valB) return 1;
+        if (valA && !valB) return -1;
+        if (!valA && !valB) return 0;
+
+        if (valA < valB) return dir === 'asc' ? -1 : 1;
+        if (valA > valB) return dir === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    rows.forEach(function(row) { tbody.appendChild(row); });
+}
+
+function updateSortIndicators() {
+    document.querySelectorAll('.sort-indicator').forEach(function(el) {
+        var col = el.dataset.sortCol;
+        var svg = el.querySelector('svg');
+        if (col === currentSortColumn) {
+            el.classList.remove('opacity-0');
+            el.classList.add('opacity-100');
+            if (svg) svg.style.transform = currentSortDirection === 'desc' ? 'rotate(180deg)' : '';
+        } else {
+            el.classList.remove('opacity-100');
+            el.classList.add('opacity-0');
+            if (svg) svg.style.transform = '';
         }
     });
 }
@@ -276,7 +433,6 @@ function updateBulkToolbar() {
         toolbar.classList.add('hidden');
     }
 
-    // Update select-all state
     var visibleCbs = Array.from(allCbs).filter(function(cb) { return cb.closest('tr').style.display !== 'none'; });
     var allChecked = visibleCbs.length > 0 && visibleCbs.every(function(cb) { return cb.checked; });
     selectAll.checked = allChecked;
@@ -287,15 +443,15 @@ function applyBulkUpdate() {
     var slugs = getSelectedSlugs();
     var status = document.getElementById('bulk-status').value;
     var channel = document.getElementById('bulk-channel').value;
+    var aanhef = document.getElementById('bulk-aanhef').value;
     var template = document.getElementById('bulk-template').value;
 
     if (slugs.length === 0) return;
-    if (!status && !channel && !template) {
-        showToast({type: 'error', message: 'Selecteer een status, kanaal of template om toe te passen.'});
+    if (!status && !channel && !aanhef && !template) {
+        showToast({type: 'error', message: 'Selecteer een status, kanaal, aanhef of template om toe te passen.'});
         return;
     }
 
-    // Populate hidden form with selected slugs
     var container = document.getElementById('bulk-slugs-container');
     container.innerHTML = '';
     slugs.forEach(function(s) {
@@ -307,9 +463,9 @@ function applyBulkUpdate() {
     });
     document.getElementById('bulk-hidden-status').value = status;
     document.getElementById('bulk-hidden-channel').value = channel;
+    document.getElementById('bulk-hidden-aanhef').value = aanhef;
     document.getElementById('bulk-hidden-template').value = template;
 
-    // Trigger htmx submission
     document.getElementById('bulk-form').requestSubmit();
 }
 
@@ -318,10 +474,6 @@ function applyBulkEmail() {
     var template = document.getElementById('bulk-template').value;
 
     if (slugs.length === 0) return;
-    if (!template) {
-        showToast({type: 'error', message: 'Selecteer eerst een template om te versturen.'});
-        return;
-    }
 
     var container = document.getElementById('bulk-email-slugs-container');
     container.innerHTML = '';
@@ -336,25 +488,53 @@ function applyBulkEmail() {
     document.getElementById('bulk-email-form').submit();
 }
 
-// Re-attach bulk toolbar state after OOB swaps
+function applyBulkDelete() {
+    var slugs = getSelectedSlugs();
+    if (slugs.length === 0) return;
+
+    showModal({
+        title: 'Prospects verwijderen',
+        message: 'Weet je zeker dat je ' + slugs.length + ' prospect(s) wilt verwijderen?',
+        variant: 'danger',
+        onConfirm: function() {
+            var container = document.getElementById('bulk-delete-slugs-container');
+            container.innerHTML = '';
+            slugs.forEach(function(s) {
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'slugs';
+                input.value = s;
+                container.appendChild(input);
+            });
+
+            document.getElementById('bulk-delete-form').requestSubmit();
+        }
+    });
+}
+
+// Re-apply sort and filters after HTMX swaps (bulk update/delete/add)
 document.body.addEventListener('htmx:afterSettle', function() {
-    updateBulkToolbar();
+    if (currentSortColumn) {
+        applySortToDOM();
+    }
+    filterProspects();
 });
 
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-        // Prospect detail modal eerst (bovenste laag)
         var modal = document.getElementById('modal-container');
         if (modal && modal.innerHTML.trim() !== '') {
             modal.innerHTML = '';
             return;
         }
-        // Handmatig toevoegen panel
         var form = document.getElementById('manual-add-form');
         if (form && !form.classList.contains('hidden')) {
             form.classList.add('hidden');
         }
     }
 });
+
+// Initialize prospect count on page load
+filterProspects();
 </script>
 {% endblock %}

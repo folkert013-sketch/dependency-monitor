@@ -4,6 +4,7 @@ from .github_changelog import GitHubChangelogTool
 from .pypi_checker import PyPIVersionCheckerTool
 from .requirements_reader import RequirementsReaderTool
 from .vulnerability_scanner import VulnerabilityScannerTool
+from .mistral_ocr_tool import MistralOCRTool
 
 __all__ = [
     "RequirementsReaderTool",
@@ -12,4 +13,5 @@ __all__ = [
     "GitHubChangelogTool",
     "VulnerabilityScannerTool",
     "EmailSenderTool",
+    "MistralOCRTool",
 ]

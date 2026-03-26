@@ -1,0 +1,166 @@
+{% if error %}
+<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+    {{ error }}
+</div>
+{% elif companies %}
+
+<!-- Summary -->
+<div class="flex flex-wrap items-center gap-4 mb-6">
+    <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-50 border border-teal-200 rounded-xl text-sm">
+        <span class="font-semibold text-teal-700">{{ total_vacancies }}</span>
+        <span class="text-teal-600">vacatures gevonden</span>
+    </div>
+    <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-sm">
+        <span class="font-semibold text-indigo-700">{{ total_companies }}</span>
+        <span class="text-indigo-600">unieke bedrijven</span>
+    </div>
+    {% if new_stored %}
+    <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-sm">
+        <span class="font-semibold text-gray-700">{{ new_stored }}</span>
+        <span class="text-gray-600">nieuw opgeslagen</span>
+    </div>
+    {% endif %}
+    <div class="text-xs text-gray-400">
+        Bronnen: {{ sources_used }}
+    </div>
+</div>
+
+{% if group_slug %}
+<!-- Bulk save button -->
+<div class="mb-6">
+    <button type="button"
+            id="save-all-btn"
+            hx-post="{% url 'dashboard:htmx_vacancy_save_all' %}"
+            hx-vals='js:{
+                "company_names": JSON.stringify(Array.from(document.querySelectorAll(".vacancy-company-card:not([data-saved]) input[name=company_name]")).map(i => i.value)),
+                "locations": JSON.stringify(Object.fromEntries(Array.from(document.querySelectorAll(".vacancy-company-card:not([data-saved])")).map(c => [c.querySelector("input[name=company_name]").value, c.querySelector("input[name=location]")?.value || ""]))),
+                "group_slug": "{{ group_slug }}"
+            }'
+            hx-swap="none"
+            hx-indicator="#save-all-spinner"
+            hx-confirm="Alle nieuwe bedrijven opslaan als prospects?"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white text-sm font-semibold rounded-xl hover:from-teal-700 hover:to-teal-800 transition-all shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+        Alle nieuwe bedrijven opslaan
+        <span id="save-all-spinner" class="htmx-indicator">
+            <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        </span>
+    </button>
+</div>
+{% endif %}
+
+<!-- Company cards -->
+<div class="space-y-4">
+    {% for company in companies %}
+    <div class="vacancy-company-card bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm hover:shadow-md transition-shadow"
+         {% if company.already_saved %}data-saved{% endif %}>
+        <div class="flex items-start justify-between gap-4">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-3 mb-1">
+                    <h3 class="text-lg font-semibold text-gray-900 truncate">{{ company.name }}</h3>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-700">
+                        {{ company.vacancy_count }} vacature{{ company.vacancy_count|pluralize:"s" }}
+                    </span>
+                    {% if company.max_relevance >= 50 %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                        {% if company.max_relevance >= 75 %}bg-emerald-100 text-emerald-700
+                        {% else %}bg-amber-100 text-amber-700{% endif %}">
+                        {{ company.max_relevance }}% match
+                    </span>
+                    {% elif company.max_relevance > 0 %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500">
+                        {{ company.max_relevance }}%
+                    </span>
+                    {% endif %}
+                </div>
+                {% if company.location %}
+                <p class="text-sm text-gray-500 flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    {{ company.location }}
+                </p>
+                {% endif %}
+
+                <!-- Categories -->
+                <div class="flex flex-wrap gap-1.5 mt-2">
+                    {% for cat in company.categories %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium
+                        {% if cat == 'financieel' %}bg-purple-100 text-purple-700
+                        {% elif cat == 'data_analyse' %}bg-blue-100 text-blue-700
+                        {% elif cat == 'ict' %}bg-amber-100 text-amber-700
+                        {% else %}bg-gray-100 text-gray-600{% endif %}">
+                        {{ cat }}
+                    </span>
+                    {% endfor %}
+                </div>
+
+                <!-- Vacancy list (collapsible) -->
+                <details class="mt-3">
+                    <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-700 select-none">
+                        Bekijk vacatures ({{ company.vacancy_count }})
+                    </summary>
+                    <ul class="mt-2 space-y-1.5">
+                        {% for v in company.vacancies %}
+                        <li class="flex items-start gap-2 text-sm">
+                            <span class="text-gray-400 mt-0.5">&bull;</span>
+                            <div class="flex-1 min-w-0">
+                                {% if v.source_url %}
+                                <a href="{{ v.source_url }}" target="_blank" rel="noopener" class="text-gray-700 hover:text-teal-600 transition-colors">
+                                    {{ v.title }}
+                                </a>
+                                {% else %}
+                                <span class="text-gray-700">{{ v.title }}</span>
+                                {% endif %}
+                                {% if v.salary %}
+                                <span class="text-xs text-emerald-600 ml-1">{{ v.salary }}</span>
+                                {% endif %}
+                                <span class="inline-flex items-center px-1 py-0 rounded text-[9px] font-medium bg-gray-100 text-gray-500 ml-1">{{ v.source }}</span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            </div>
+
+            <!-- Save button -->
+            <div class="flex-shrink-0" id="save-btn-{{ forloop.counter }}">
+                {% if company.already_saved %}
+                <span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Al opgeslagen
+                </span>
+                {% elif group_slug %}
+                <input type="hidden" name="company_name" value="{{ company.name }}">
+                <input type="hidden" name="location" value="{{ company.location }}">
+                <button type="button"
+                        hx-post="{% url 'dashboard:htmx_vacancy_save_company' %}"
+                        hx-vals='{"company_name": "{{ company.name|escapejs }}", "location": "{{ company.location|escapejs }}", "group_slug": "{{ group_slug }}"}'
+                        hx-target="#save-btn-{{ forloop.counter }}"
+                        hx-swap="innerHTML"
+                        hx-indicator="#spinner-{{ forloop.counter }}"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 text-teal-700 text-xs font-medium rounded-lg hover:bg-teal-100 transition-colors border border-teal-200">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    Opslaan
+                    <span id="spinner-{{ forloop.counter }}" class="htmx-indicator">
+                        <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    </span>
+                </button>
+                {% else %}
+                <span class="text-xs text-gray-400">Kies een groep</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% elif companies is not None %}
+<div class="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
+    <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+    </svg>
+    <p class="text-gray-500 text-sm">Geen vacatures gevonden voor deze zoekopdracht.</p>
+    <p class="text-gray-400 text-xs mt-1">Probeer een andere zoekterm of locatie.</p>
+</div>
+{% endif %}

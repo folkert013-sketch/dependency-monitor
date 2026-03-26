@@ -126,13 +126,15 @@ def run_fiscal_crew(log_callback=None) -> dict:
 
     # Extract token usage
     total_tokens = 0
+    total_input = 0
+    total_output = 0
     estimated_cost = Decimal("0")
 
     if hasattr(result, "token_usage"):
         usage = result.token_usage
-        total_input = getattr(usage, "total_tokens", 0) or getattr(usage, "prompt_tokens", 0) or 0
+        total_input = getattr(usage, "prompt_tokens", 0) or 0
         total_output = getattr(usage, "completion_tokens", 0) or 0
-        total_tokens = total_input + total_output
+        total_tokens = getattr(usage, "total_tokens", 0) or (total_input + total_output)
         input_cost = Decimal(str(total_input)) * Decimal("0.00000125")
         output_cost = Decimal(str(total_output)) * Decimal("0.00001")
         estimated_cost = (input_cost + output_cost).quantize(Decimal("0.0001"))
@@ -145,6 +147,8 @@ def run_fiscal_crew(log_callback=None) -> dict:
     return {
         "articles": articles,
         "total_tokens": total_tokens,
+        "total_input": total_input,
+        "total_output": total_output,
         "estimated_cost": estimated_cost,
         "raw_output": raw_output,
     }

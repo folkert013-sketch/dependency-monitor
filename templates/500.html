@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="nl" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serverfout — FenoFin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','system-ui','sans-serif']}}}}</script>
+</head>
+<body class="h-full bg-gradient-to-br from-slate-50 to-red-50 font-sans">
+    <div class="min-h-full flex items-center justify-center px-4">
+        <div class="text-center">
+            <p class="text-7xl font-bold text-red-600">500</p>
+            <h1 class="mt-4 text-2xl font-bold text-gray-900">Serverfout</h1>
+            <p class="mt-2 text-gray-600">Er is een onverwachte fout opgetreden. Probeer het later opnieuw.</p>
+            <div class="mt-8">
+                <a href="/" class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-indigo-700 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    Terug naar dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -12,3 +12,6 @@ venv/
 .idea/
 *.swp
 *.swo
+media/
+dump.json
+data/

@@ -59,6 +59,13 @@ class GooglePlacesService:
             logger.exception("Google Places API request failed")
             raise
 
+        # Log API usage
+        try:
+            from dashboard.services.api_usage import log_api_call
+            log_api_call(service="google_places", description=f"Text Search: {query[:100]}")
+        except Exception:
+            logger.warning("Could not log Places API usage", exc_info=True)
+
         results = []
         for place in data.get("places", []):
             display_name = place.get("displayName", {})

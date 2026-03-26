@@ -1,4 +1,4 @@
-<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+<div id="variables-area" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <div>
             <h2 class="text-lg font-semibold text-gray-900">Variabelen</h2>
@@ -32,6 +32,7 @@
                         <option value="text">Text</option>
                         <option value="textarea">Textarea</option>
                         <option value="file_path">File path</option>
+                        <option value="select">Select (dropdown)</option>
                     </select>
                 </div>
             </div>
@@ -63,31 +64,113 @@
     {% if variables %}
     <div class="divide-y divide-gray-100">
         {% for var in variables %}
-        <div class="px-6 py-3 flex items-center justify-between group" id="var-row-{{ var.pk }}">
-            <div class="flex items-center gap-3 min-w-0">
-                <code class="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-mono flex-shrink-0">{{"{"}}{{ var.name }}{{"}"}}</code>
-                <span class="text-sm text-gray-700 truncate">{{ var.label }}</span>
-                <span class="px-1.5 py-0.5 rounded text-xs font-medium {% if var.input_type == 'file_path' %}bg-amber-100 text-amber-700{% elif var.input_type == 'textarea' %}bg-blue-100 text-blue-700{% else %}bg-gray-100 text-gray-600{% endif %}">
-                    {{ var.get_input_type_display }}
-                </span>
+        <div class="px-6 py-3 group" id="var-row-{{ var.pk }}">
+            <!-- Header: naam, label, type, acties -->
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-3 min-w-0">
+                    <code class="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-mono flex-shrink-0">{{"{"}}{{ var.name }}{{"}"}}</code>
+                    <span class="text-sm font-medium text-gray-700 truncate">{{ var.label }}</span>
+                    <span class="px-1.5 py-0.5 rounded text-xs font-medium {% if var.input_type == 'file_path' %}bg-amber-100 text-amber-700{% elif var.input_type == 'textarea' %}bg-blue-100 text-blue-700{% elif var.input_type == 'select' %}bg-green-100 text-green-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                        {{ var.get_input_type_display }}
+                    </span>
+                    {% if var.required %}<span class="text-xs text-red-400">*</span>{% endif %}
+                </div>
+                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onclick="document.getElementById('edit-var-{{ var.pk }}').classList.toggle('hidden');this.closest('[id^=var-row]').classList.toggle('hidden')"
+                            class="p-1.5 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-gray-100 transition-colors" title="Alle velden bewerken">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    </button>
+                    <button hx-post="{% url 'dashboard:team_variable_delete' team.slug var.pk %}" hx-target="#variables-area" hx-swap="outerHTML"
+                            hx-confirm="Variabele '{{ var.name }}' verwijderen?"
+                            class="p-1.5 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-100 transition-colors" title="Verwijderen">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                </div>
+            </div>
+            <!-- Inline waarde invoer -->
+            {% if var.input_type == "file_path" %}
                 {% if var.default_value %}
-                <span class="text-xs text-gray-400 truncate max-w-[200px]">default: {{ var.default_value }}</span>
+                <!-- Bestand al geüpload: toon naam + verwijder -->
+                <div class="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
+                    <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span class="text-sm text-green-800 font-medium truncate flex-1">{{ var.default_value|truncatechars:60 }}</span>
+                    <form hx-post="{% url 'dashboard:team_variable_edit' team.slug var.pk %}" hx-target="#variables-area" hx-swap="outerHTML" class="flex-shrink-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="default_value" value="">
+                        <button type="submit" class="text-xs text-red-500 hover:text-red-700 font-medium">Verwijderen</button>
+                    </form>
+                </div>
+                {% else %}
+                <!-- File upload -->
+                <form hx-post="{% url 'dashboard:team_variable_upload' team.slug var.pk %}" hx-target="#variables-area" hx-swap="outerHTML"
+                      hx-encoding="multipart/form-data" class="flex gap-2 items-center">
+                    {% csrf_token %}
+                    <label class="flex-1 flex items-center gap-3 border-2 border-dashed border-gray-300 rounded-lg px-4 py-2.5 cursor-pointer
+                                  hover:border-indigo-400 hover:bg-indigo-50/50 transition-all">
+                        <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                        <span class="dz-label text-sm text-gray-400 truncate">{{ var.description|default:"Klik om een PDF te selecteren" }}</span>
+                        <input type="file" name="file" accept=".pdf" class="hidden"
+                               onchange="var lbl=this.closest('label').querySelector('.dz-label');
+                                         var btn=this.closest('form').querySelector('.upload-btn');
+                                         if(this.files[0]){lbl.textContent=this.files[0].name; lbl.classList.remove('text-gray-400'); lbl.classList.add('text-indigo-700','font-medium'); btn.classList.remove('hidden');}
+                                         else{lbl.textContent='{{ var.description|default:"Klik om een PDF te selecteren" }}'; lbl.classList.add('text-gray-400'); lbl.classList.remove('text-indigo-700','font-medium'); btn.classList.add('hidden');}">
+                    </label>
+                    <button type="submit" class="upload-btn hidden px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors flex-shrink-0">
+                        Upload
+                    </button>
+                </form>
                 {% endif %}
-                {% if not var.required %}
-                <span class="text-xs text-gray-400">(optioneel)</span>
+            {% elif var.input_type == "select" %}
+            <form hx-post="{% url 'dashboard:team_variable_edit' team.slug var.pk %}" hx-target="#variables-area" hx-swap="outerHTML" class="flex gap-2 items-start">
+                {% csrf_token %}
+                <select name="default_value" class="flex-1 text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    {% for opt in var.options %}
+                    <option value="{{ opt.value }}" {% if opt.value == var.default_value %}selected{% endif %}>{{ opt.label }}</option>
+                    {% empty %}
+                    <option value="">— Geen opties geconfigureerd —</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors flex-shrink-0">
+                    Opslaan
+                </button>
+            </form>
+            {% if var.options %}
+            <!-- Opties overzicht met tools badges -->
+            <div class="mt-2 space-y-1">
+                {% for opt in var.options %}
+                <div class="flex items-center gap-2 text-xs">
+                    <code class="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">{{ opt.value }}</code>
+                    <span class="text-gray-500">{{ opt.label }}</span>
+                    {% if opt.tools %}
+                    <span class="text-gray-300 mx-1">|</span>
+                    {% for tool_id in opt.tools %}
+                    <span class="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-mono">{{ tool_id }}</span>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% else %}
+            <form hx-post="{% url 'dashboard:team_variable_edit' team.slug var.pk %}" hx-target="#variables-area" hx-swap="outerHTML" class="flex gap-2 items-start">
+                {% csrf_token %}
+                {% if var.input_type == "textarea" %}
+                <textarea name="default_value" rows="2" placeholder="{{ var.description }}"
+                          class="flex-1 text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">{{ var.default_value }}</textarea>
+                {% else %}
+                <input type="text" name="default_value" value="{{ var.default_value }}" placeholder="{{ var.description }}"
+                       class="flex-1 text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                 {% endif %}
-            </div>
-            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onclick="document.getElementById('edit-var-{{ var.pk }}').classList.toggle('hidden');this.closest('[id^=var-row]').classList.toggle('hidden')"
-                        class="p-1.5 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-gray-100 transition-colors" title="Bewerken">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                <button type="submit" class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors flex-shrink-0">
+                    Opslaan
                 </button>
-                <button hx-post="{% url 'dashboard:team_variable_delete' team.slug var.pk %}" hx-target="#variables-area" hx-swap="outerHTML"
-                        hx-confirm="Variabele '{{ var.name }}' verwijderen?"
-                        class="p-1.5 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-100 transition-colors" title="Verwijderen">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                </button>
-            </div>
+            </form>
+            {% endif %}
+            {% if var.description and var.default_value and var.input_type != "file_path" %}
+            <p class="text-xs text-gray-400 mt-1">{{ var.description }}</p>
+            {% endif %}
         </div>
         <!-- Edit form (hidden) -->
         <div id="edit-var-{{ var.pk }}" class="hidden bg-gray-50 border-b border-gray-100 p-5">
@@ -108,6 +191,7 @@
                             <option value="text" {% if var.input_type == "text" %}selected{% endif %}>Text</option>
                             <option value="textarea" {% if var.input_type == "textarea" %}selected{% endif %}>Textarea</option>
                             <option value="file_path" {% if var.input_type == "file_path" %}selected{% endif %}>File path</option>
+                            <option value="select" {% if var.input_type == "select" %}selected{% endif %}>Select (dropdown)</option>
                         </select>
                     </div>
                 </div>
@@ -121,6 +205,28 @@
                         <input type="text" name="description" value="{{ var.description }}" class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
                 </div>
+                {% if var.input_type == "select" %}
+                <!-- Opties editor voor select variabelen -->
+                <div class="mb-3 p-3 bg-white border border-gray-200 rounded-lg">
+                    <label class="block text-xs font-medium text-gray-600 mb-2">Opties (value | label | tools)</label>
+                    <div class="space-y-1.5 mb-2" id="options-list-{{ var.pk }}">
+                        {% for opt in var.options %}
+                        <div class="flex items-center gap-2 text-xs">
+                            <code class="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-mono min-w-[3rem]">{{ opt.value }}</code>
+                            <span class="text-gray-700 flex-1 truncate">{{ opt.label }}</span>
+                            {% if opt.tools %}
+                            {% for tool_id in opt.tools %}
+                            <span class="bg-gray-100 text-gray-600 px-1 py-0.5 rounded font-mono text-[10px]">{{ tool_id }}</span>
+                            {% endfor %}
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <textarea name="options" rows="3" placeholder='[{"value":"vpb","label":"VPB","tools":["vpb_lookup"]}]'
+                              class="w-full text-xs font-mono rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">{{ var.options|safe }}</textarea>
+                    <p class="text-[10px] text-gray-400 mt-1">JSON array: [{"value":"...", "label":"...", "tools":["tool_id",...]}]. Tools is optioneel.</p>
+                </div>
+                {% endif %}
                 <div class="flex items-center justify-between">
                     <label class="flex items-center gap-2 text-sm text-gray-600">
                         <input type="checkbox" name="required" {% if var.required %}checked{% endif %} class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">

@@ -1,0 +1,209 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}API Gebruik & Kosten{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-xl font-bold text-white">API Gebruik & Kosten</h1>
+                    <p class="text-indigo-200 text-sm mt-1">Overzicht van token verbruik en API-kosten</p>
+                </div>
+                <a href="{% url 'account_profile' %}" class="text-indigo-200 hover:text-white transition-colors text-sm flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    Terug naar profiel
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-4">
+        <div class="flex flex-wrap items-center gap-3">
+            <span class="text-sm font-medium text-gray-500">Periode:</span>
+            <a href="?days=1{% if service_filter %}&service={{ service_filter }}{% endif %}"
+               class="px-3 py-1.5 text-sm rounded-lg transition-colors {% if days == 1 %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700{% endif %}">
+                Vandaag
+            </a>
+            <a href="?days=7{% if service_filter %}&service={{ service_filter }}{% endif %}"
+               class="px-3 py-1.5 text-sm rounded-lg transition-colors {% if days == 7 %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700{% endif %}">
+                7 dagen
+            </a>
+            <a href="?days=30{% if service_filter %}&service={{ service_filter }}{% endif %}"
+               class="px-3 py-1.5 text-sm rounded-lg transition-colors {% if days == 30 %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700{% endif %}">
+                30 dagen
+            </a>
+            <a href="?days=90{% if service_filter %}&service={{ service_filter }}{% endif %}"
+               class="px-3 py-1.5 text-sm rounded-lg transition-colors {% if days == 90 %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700{% endif %}">
+                90 dagen
+            </a>
+            <a href="?days=0{% if service_filter %}&service={{ service_filter }}{% endif %}"
+               class="px-3 py-1.5 text-sm rounded-lg transition-colors {% if days == 0 %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700{% endif %}">
+                Alles
+            </a>
+
+            <span class="text-sm font-medium text-gray-500 ml-4">Service:</span>
+            <a href="?days={{ days }}"
+               class="px-3 py-1.5 text-sm rounded-lg transition-colors {% if not service_filter %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700{% endif %}">
+                Alle
+            </a>
+            {% for value, label in service_choices %}
+            <a href="?days={{ days }}&service={{ value }}"
+               class="px-3 py-1.5 text-sm rounded-lg transition-colors {% if service_filter == value %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700{% endif %}">
+                {{ label }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Total cost -->
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                    <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <span class="text-sm font-medium text-gray-500">Totale kosten</span>
+            </div>
+            <p class="text-2xl font-bold text-gray-900">${{ totals.total_cost|floatformat:4 }}</p>
+        </div>
+
+        <!-- Total tokens -->
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                    <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                </div>
+                <span class="text-sm font-medium text-gray-500">Totale tokens</span>
+            </div>
+            <p class="text-2xl font-bold text-gray-900">{{ totals.total_tokens|default:0 }}</p>
+            <p class="text-xs text-gray-400 mt-1">{{ totals.total_input|default:0 }} in / {{ totals.total_output|default:0 }} out</p>
+        </div>
+
+        <!-- API calls -->
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                    <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+                <span class="text-sm font-medium text-gray-500">API calls</span>
+            </div>
+            <p class="text-2xl font-bold text-gray-900">{{ totals.total_calls }}</p>
+        </div>
+
+        <!-- Month cost -->
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                    <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                </div>
+                <span class="text-sm font-medium text-gray-500">Kosten deze maand</span>
+            </div>
+            <p class="text-2xl font-bold text-gray-900">${{ month_cost|floatformat:4 }}</p>
+        </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Kosten over tijd</h2>
+        <div class="relative" style="height: 280px;">
+            <canvas id="costChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Service breakdown -->
+    {% if by_service %}
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Uitsplitsing per service</h2>
+        <div class="space-y-4">
+            {% for entry in by_service %}
+            <div class="flex items-center gap-4">
+                <div class="w-40 text-sm font-medium text-gray-700">{{ entry.display }}</div>
+                <div class="flex-1">
+                    <div class="w-full bg-gray-100 rounded-full h-3">
+                        <div class="bg-gradient-to-r from-indigo-500 to-purple-500 h-3 rounded-full transition-all" style="width: {{ entry.pct }}%"></div>
+                    </div>
+                </div>
+                <div class="w-24 text-right text-sm font-semibold text-gray-900">${{ entry.cost|floatformat:4 }}</div>
+                <div class="w-28 text-right text-xs text-gray-500">{{ entry.tokens }} tokens</div>
+                <div class="w-20 text-right text-xs text-gray-500">{{ entry.calls }} calls</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Detailed log table -->
+    <div id="usage-table">
+        {% include "registration/_api_usage_table.html" %}
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    const labels = {{ chart_labels|safe }};
+    const costs = {{ chart_costs|safe }};
+
+    if (labels.length === 0) return;
+
+    const ctx = document.getElementById('costChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Kosten ($)',
+                data: costs,
+                borderColor: '#6366f1',
+                backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointBackgroundColor: '#6366f1',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1e1b4b',
+                    titleFont: { size: 13 },
+                    bodyFont: { size: 12 },
+                    padding: 10,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: function(ctx) {
+                            return '$' + ctx.parsed.y.toFixed(4);
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { size: 11 }, color: '#9ca3af' }
+                },
+                y: {
+                    grid: { color: '#f3f4f6' },
+                    ticks: {
+                        font: { size: 11 },
+                        color: '#9ca3af',
+                        callback: function(value) { return '$' + value.toFixed(4); }
+                    }
+                }
+            }
+        }
+    });
+})();
+</script>
+{% endblock %}

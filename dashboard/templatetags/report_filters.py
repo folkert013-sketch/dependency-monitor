@@ -321,3 +321,21 @@ def contains_pk(queryset, pk):
         return queryset.filter(pk=pk).exists()
     except (AttributeError, TypeError, ValueError):
         return False
+
+
+@register.filter
+def ensure_url(url):
+    """Zorg dat een URL een protocol heeft (voegt https:// toe als het ontbreekt)."""
+    if not url:
+        return url
+    if "://" not in url:
+        return f"https://{url}"
+    return url
+
+
+@register.filter
+def tool_label(tool_id):
+    """Return the display label for a tool ID from the registry."""
+    from dashboard.tool_registry import TOOL_REGISTRY
+    entry = TOOL_REGISTRY.get(tool_id)
+    return entry["label"] if entry else tool_id

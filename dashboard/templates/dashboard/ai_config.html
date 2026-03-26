@@ -1,0 +1,131 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}AI Configuratie{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-600 to-purple-700 text-white p-8 mb-8 shadow-lg">
+    <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDE1aDJ2MmgtMnptLTIgMGgydjJoLTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-50"></div>
+    <div class="relative">
+        <h1 class="text-2xl font-bold mb-2">AI Configuratie</h1>
+        <p class="text-indigo-100 text-sm">Overzicht van beschikbare AI-providers, modellen en tools</p>
+    </div>
+    <div class="relative mt-6 flex gap-6">
+        <div class="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3">
+            <p class="text-2xl font-bold">3</p>
+            <p class="text-xs text-indigo-200">Providers</p>
+        </div>
+        <div class="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3">
+            <p class="text-2xl font-bold">{{ tool_count }}</p>
+            <p class="text-xs text-indigo-200">Tools</p>
+        </div>
+    </div>
+</div>
+
+<!-- ===== SECTIE 1: AI PROVIDERS & MODELLEN ===== -->
+<div class="mb-8">
+    <h2 class="text-lg font-semibold text-gray-900 mb-1">AI Providers & Modellen</h2>
+    <p class="text-sm text-gray-500 mb-4">Beschikbare LLM providers en hun modellen. Configureer API keys via <code class="bg-gray-100 px-1 rounded text-xs">.env</code></p>
+
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {% for pd in provider_info %}
+        <div class="border rounded-xl overflow-hidden {{ pd.border_class }} bg-white shadow-sm">
+            <!-- Provider header -->
+            <div class="px-5 py-4 {{ pd.bg_class }} border-b {{ pd.border_class }}">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-bold {{ pd.text_class }}">{{ pd.label }}</h3>
+                    {% if pd.has_key %}
+                    <span class="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                        Actief
+                    </span>
+                    {% else %}
+                    <span class="flex items-center gap-1.5 text-xs font-medium text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
+                        <span class="w-1.5 h-1.5 bg-red-400 rounded-full"></span>
+                        Niet ingesteld
+                    </span>
+                    {% endif %}
+                </div>
+                {% if not pd.has_key %}
+                <p class="text-xs text-gray-500 mt-1.5">Stel <code class="bg-white/60 px-1 rounded">{{ pd.env_key }}</code> in via .env</p>
+                {% endif %}
+            </div>
+            <!-- Models -->
+            <div class="p-5">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2.5">{{ pd.models|length }} modellen</p>
+                <div class="space-y-2">
+                    {% for model in pd.models %}
+                    <div class="flex items-center justify-between py-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-sm text-gray-800">{{ model.label }}</span>
+                        </div>
+                        <span class="px-2 py-0.5 rounded-full text-xs font-medium
+                            {% if model.tier == 'fast' %}bg-emerald-50 text-emerald-700
+                            {% elif model.tier == 'pro' %}bg-blue-50 text-blue-700
+                            {% elif model.tier == 'flagship' %}bg-purple-50 text-purple-700
+                            {% else %}bg-amber-50 text-amber-700{% endif %}">
+                            {{ model.tier }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ===== SECTIE 2: TOOLS ===== -->
+<div class="mb-8">
+    <h2 class="text-lg font-semibold text-gray-900 mb-1">Tools</h2>
+    <p class="text-sm text-gray-500 mb-4">{{ tool_count }} tools beschikbaar om aan AI agents toe te wijzen</p>
+
+    {% for cat_key, cat in tool_categories.items %}
+    <div class="mb-6">
+        <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full
+                {% if cat_key == 'monitor' %}bg-blue-500{% elif cat_key == 'fiscal' %}bg-amber-500{% else %}bg-purple-500{% endif %}"></span>
+            {{ cat.label }}
+            <span class="text-xs font-normal text-gray-400">({{ cat.tools|length }})</span>
+        </h3>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for tool in cat.tools %}
+            <div class="bg-white border border-gray-200 rounded-xl p-4 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer group"
+                 onclick="this.querySelector('.tool-detail').classList.toggle('hidden')">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <h4 class="font-medium text-sm text-gray-900 group-hover:text-indigo-700 transition-colors">{{ tool.label }}</h4>
+                        <p class="text-xs text-gray-500 mt-0.5">{{ tool.description }}</p>
+                    </div>
+                    <svg class="w-4 h-4 text-gray-300 group-hover:text-indigo-400 transition-colors flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
+                <!-- Detail popup (hidden) -->
+                <div class="tool-detail hidden mt-3 pt-3 border-t border-gray-100">
+                    <div class="space-y-1.5">
+                        <p class="text-xs text-gray-600"><span class="font-medium text-gray-700">Tool ID:</span> <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs">{{ tool.id }}</code></p>
+                        <p class="text-xs text-gray-600"><span class="font-medium text-gray-700">Categorie:</span> {{ cat.label }}</p>
+                        <p class="text-xs text-gray-600"><span class="font-medium text-gray-700">Beschrijving:</span> {{ tool.description }}</p>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">Wijs deze tool toe aan agents in je <a href="{% url 'dashboard:team_list' %}" class="text-indigo-600 hover:underline">AI Teams</a></p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Quick links -->
+<div class="flex gap-3">
+    <a href="{% url 'dashboard:team_list' %}" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Naar AI Teams
+    </a>
+    <a href="{% url 'dashboard:hub' %}" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        Dashboard
+    </a>
+</div>
+{% endblock %}

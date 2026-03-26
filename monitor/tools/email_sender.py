@@ -1,6 +1,24 @@
 import os
 
+import bleach
 from crewai.tools import BaseTool
+
+# Allowed HTML tags/attributes for email content from LLM output
+_ALLOWED_TAGS = [
+    "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr",
+    "strong", "b", "em", "i", "u", "s", "sub", "sup",
+    "ul", "ol", "li", "dl", "dt", "dd",
+    "table", "thead", "tbody", "tr", "th", "td",
+    "a", "img", "span", "div", "blockquote", "pre", "code",
+]
+_ALLOWED_ATTRS = {
+    "a": ["href", "title"],
+    "img": ["src", "alt", "width", "height"],
+    "td": ["colspan", "rowspan"],
+    "th": ["colspan", "rowspan"],
+    "*": ["style"],
+}
+_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
 
 
 class EmailSenderTool(BaseTool):
@@ -18,6 +36,15 @@ class EmailSenderTool(BaseTool):
         parts = email_content.split("BODY:", 1)
         subject_line = parts[0].replace("SUBJECT:", "").strip()
         html_body = parts[1].strip()
+
+        # Sanitize LLM-generated HTML to prevent script injection
+        html_body = bleach.clean(
+            html_body,
+            tags=_ALLOWED_TAGS,
+            attributes=_ALLOWED_ATTRS,
+            protocols=_ALLOWED_PROTOCOLS,
+            strip=True,
+        )
 
         email_to = os.environ.get("EMAIL_TO", os.environ.get("MS_GRAPH_USER_ID", ""))
 

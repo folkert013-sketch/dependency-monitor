@@ -2,9 +2,14 @@ from django.contrib import admin
 
 from .models import (
     BlogArticle, BusinessType, ComplianceReport, ComplianceSection,
-    ComplianceSectionVersion, DiaryGoal, Finding, PlacesSearch, Prospect,
-    ProspectGroup, ProspectResponse, Report, ResponseTemplate, SalesDiary,
-    Team, TeamAgent, TeamTask, TeamVariable, TemplateCategory, TrackingEvent,
+    ComplianceSectionVersion, DiaryGoal, Finding,
+    FiscaalArtikel, FiscaalConceptMapping, FiscaalHoofdstuk, FiscaalLid, FiscaleWet,
+    PlacesSearch, Prospect,
+    ProspectGroup, ProspectResponse, Report, ResponseTemplate,
+    RJAlinea, RJHoofdstuk, RJRubriekMapping, RJSectie,
+    SalesDiary, Team, TeamAgent, TeamTask, TeamVariable,
+    TemplateCategory, TrackingEvent,
+    VpbBoekHoofdstuk, VpbBoekPassage, VpbBoekSectie,
 )
 
 
@@ -165,3 +170,176 @@ class TrackingEventAdmin(admin.ModelAdmin):
 class BusinessTypeAdmin(admin.ModelAdmin):
     list_display = ["google_type", "label"]
     search_fields = ["google_type", "label"]
+
+
+# ---------------------------------------------------------------------------
+# RJ Richtlijnen
+# ---------------------------------------------------------------------------
+
+class RJSectieInline(admin.TabularInline):
+    model = RJSectie
+    extra = 0
+    fields = ["paragraaf", "titel", "order"]
+
+
+class RJAlineaInline(admin.TabularInline):
+    model = RJAlinea
+    extra = 0
+    fields = ["nummer", "sub_onderwerp", "inhoud", "order"]
+    readonly_fields = []
+
+
+@admin.register(RJHoofdstuk)
+class RJHoofdstukAdmin(admin.ModelAdmin):
+    list_display = ["code", "titel", "afdeling", "editie", "is_active", "order"]
+    list_filter = ["afdeling", "is_active"]
+    search_fields = ["code", "titel", "beschrijving"]
+    inlines = [RJSectieInline]
+
+
+@admin.register(RJSectie)
+class RJSectieAdmin(admin.ModelAdmin):
+    list_display = ["paragraaf", "hoofdstuk", "titel"]
+    list_filter = ["hoofdstuk"]
+    search_fields = ["paragraaf", "titel"]
+    inlines = [RJAlineaInline]
+
+
+@admin.register(RJAlinea)
+class RJAlineaAdmin(admin.ModelAdmin):
+    list_display = ["referentie", "sub_onderwerp", "short_inhoud"]
+    list_filter = ["sectie__hoofdstuk"]
+    search_fields = ["nummer", "inhoud", "sub_onderwerp"]
+
+    @admin.display(description="Referentie")
+    def referentie(self, obj):
+        return f"{obj.sectie.paragraaf}.{obj.nummer}"
+
+    @admin.display(description="Inhoud")
+    def short_inhoud(self, obj):
+        return obj.inhoud[:120] + "..." if len(obj.inhoud) > 120 else obj.inhoud
+
+
+@admin.register(RJRubriekMapping)
+class RJRubriekMappingAdmin(admin.ModelAdmin):
+    list_display = ["rubriek_naam", "rubriek_code"]
+    search_fields = ["rubriek_naam"]
+    filter_horizontal = ["hoofdstukken"]
+
+
+# ---------------------------------------------------------------------------
+# Fiscale Wetgeving
+# ---------------------------------------------------------------------------
+
+class FiscaalHoofdstukInline(admin.TabularInline):
+    model = FiscaalHoofdstuk
+    extra = 0
+    fields = ["nummer", "titel", "order"]
+
+
+class FiscaalArtikelInline(admin.TabularInline):
+    model = FiscaalArtikel
+    extra = 0
+    fields = ["nummer", "titel", "is_vervallen", "order"]
+
+
+class FiscaalLidInline(admin.TabularInline):
+    model = FiscaalLid
+    extra = 0
+    fields = ["nummer", "inhoud", "order"]
+
+
+@admin.register(FiscaleWet)
+class FiscaleWetAdmin(admin.ModelAdmin):
+    list_display = ["code", "afkorting", "naam", "bwb_id", "is_active"]
+    list_filter = ["is_active"]
+    search_fields = ["code", "naam", "afkorting"]
+    inlines = [FiscaalHoofdstukInline]
+
+
+@admin.register(FiscaalHoofdstuk)
+class FiscaalHoofdstukAdmin(admin.ModelAdmin):
+    list_display = ["nummer", "wet", "titel"]
+    list_filter = ["wet"]
+    search_fields = ["nummer", "titel"]
+    inlines = [FiscaalArtikelInline]
+
+
+@admin.register(FiscaalArtikel)
+class FiscaalArtikelAdmin(admin.ModelAdmin):
+    list_display = ["referentie_display", "titel", "is_vervallen"]
+    list_filter = ["hoofdstuk__wet", "is_vervallen"]
+    search_fields = ["nummer", "titel", "volledige_tekst"]
+    inlines = [FiscaalLidInline]
+
+    @admin.display(description="Referentie")
+    def referentie_display(self, obj):
+        return obj.referentie
+
+
+@admin.register(FiscaalLid)
+class FiscaalLidAdmin(admin.ModelAdmin):
+    list_display = ["referentie_display", "short_inhoud"]
+    list_filter = ["artikel__hoofdstuk__wet"]
+    search_fields = ["nummer", "inhoud"]
+
+    @admin.display(description="Referentie")
+    def referentie_display(self, obj):
+        return obj.referentie
+
+    @admin.display(description="Inhoud")
+    def short_inhoud(self, obj):
+        return obj.inhoud[:120] + "..." if len(obj.inhoud) > 120 else obj.inhoud
+
+
+@admin.register(FiscaalConceptMapping)
+class FiscaalConceptMappingAdmin(admin.ModelAdmin):
+    list_display = ["concept_naam", "trefwoorden_kort"]
+    search_fields = ["concept_naam", "trefwoorden"]
+    filter_horizontal = ["artikelen"]
+
+    @admin.display(description="Trefwoorden")
+    def trefwoorden_kort(self, obj):
+        return obj.trefwoorden[:80] + "..." if len(obj.trefwoorden) > 80 else obj.trefwoorden
+
+
+# ---------------------------------------------------------------------------
+# VPB Boek
+# ---------------------------------------------------------------------------
+
+class VpbBoekSectieInline(admin.TabularInline):
+    model = VpbBoekSectie
+    extra = 0
+    fields = ["paragraaf", "titel", "order"]
+
+
+class VpbBoekPassageInline(admin.TabularInline):
+    model = VpbBoekPassage
+    extra = 0
+    fields = ["volgnummer", "inhoud", "pagina_start", "order"]
+
+
+@admin.register(VpbBoekHoofdstuk)
+class VpbBoekHoofdstukAdmin(admin.ModelAdmin):
+    list_display = ["nummer", "titel", "order"]
+    search_fields = ["nummer", "titel"]
+    inlines = [VpbBoekSectieInline]
+
+
+@admin.register(VpbBoekSectie)
+class VpbBoekSectieAdmin(admin.ModelAdmin):
+    list_display = ["paragraaf", "hoofdstuk", "titel"]
+    list_filter = ["hoofdstuk"]
+    search_fields = ["paragraaf", "titel"]
+    inlines = [VpbBoekPassageInline]
+
+
+@admin.register(VpbBoekPassage)
+class VpbBoekPassageAdmin(admin.ModelAdmin):
+    list_display = ["sectie", "volgnummer", "pagina_start", "short_inhoud"]
+    list_filter = ["sectie__hoofdstuk"]
+    search_fields = ["inhoud"]
+
+    @admin.display(description="Inhoud")
+    def short_inhoud(self, obj):
+        return obj.inhoud[:120] + "..." if len(obj.inhoud) > 120 else obj.inhoud

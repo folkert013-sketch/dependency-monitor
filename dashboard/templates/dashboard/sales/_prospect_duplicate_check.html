@@ -23,7 +23,7 @@
                 {% elif group %}
                 <button type="button"
                         hx-post="{% url 'dashboard:htmx_prospect_link_to_group' %}"
-                        hx-vals='{"prospect_id": "{{ m.pk }}", "group_slug": "{{ group.slug }}"}'
+                        hx-vals='{"prospect_id": "{{ m.pk }}", "group_slug": "{{ group.slug|escapejs }}"}'
                         hx-swap="none"
                         hx-on:htmx:after-request="document.getElementById('duplicate-results').innerHTML=''"
                         class="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg hover:bg-indigo-100 transition-colors">

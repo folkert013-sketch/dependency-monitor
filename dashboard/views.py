@@ -1,18 +1,21 @@
+import atexit
 import json
 import logging
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db import models as db_models, transaction
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db import close_old_connections, models as db_models, transaction
+from django.db.models import Count, Exists, Max, OuterRef, Q
 from django.db.models.functions import Lower
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape as html_escape
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -20,20 +23,24 @@ from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 
 from .models import (
+    _save_with_unique_slug,
     BlogArticle, BusinessType, ComplianceReport, ComplianceSection,
     ComplianceSectionVersion, DiaryGoal, Finding, PlacesSearch, Prospect,
     ProspectGroup, ProspectResponse, Report, ResponseTemplate, SalesDiary,
-    ScanJob, ScanLog, Team, TeamAgent, TeamTask, TeamVariable,
-    TemplateCategory, TrackingEvent,
+    ScanJob, ScanLog, TaskOutput, Team, TeamAgent, TeamTask, TeamVariable,
+    TemplateCategory, TrackingEvent, Vacancy, VacancySearch,
 )
 from .services.email_scraper import scrape_contact_info
 from .services.google_places import GooglePlacesService
+from .services.prospect_dedup import find_existing_prospect
+from .services.vacancy_monitor import VacancyMonitorService
 
 _stdout_lock = threading.Lock()
 logger = logging.getLogger(__name__)
 
 # K3: Limit concurrent background crew runs (prevents unbounded thread creation)
 _scan_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="crew-worker")
+atexit.register(_scan_executor.shutdown, wait=True)
 
 
 def _safe_int(value, default: int) -> int:
@@ -192,8 +199,18 @@ def _run_scan_background(job_pk: int):
         django.setup()
     except Exception:
         logger.error("django.setup() failed in _run_scan_background", exc_info=True)
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE dashboard_scanjob SET status='failed', error_message='Django setup failed' WHERE id=%s",
+                    [job_pk],
+                )
+        except Exception:
+            pass
         return
 
+    close_old_connections()
     from dashboard.models import Finding, Report, ScanJob, ScanLog
 
     job = ScanJob.objects.get(pk=job_pk)
@@ -280,11 +297,14 @@ def _run_scan_background(job_pk: int):
     except Exception as e:
         logger.error("Dependency scan failed (job=%s)", job_pk, exc_info=True)
         job.status = "failed"
-        job.error_message = f"{type(e).__name__}: {e}"
-        job.progress_message = f"Scan mislukt: {e}"
+        logger.exception("Job %s failed", job.pk)
+        job.error_message = "Er is een fout opgetreden. Controleer de logs voor details."
+        job.progress_message = "Scan mislukt"
         job.finished_at = timezone.now()
         job.save()
-        log_callback("error", "System", f"Scan mislukt: {e}")
+        log_callback("error", "System", f"Scan mislukt: {type(e).__name__}")
+    finally:
+        close_old_connections()
 
 
 # --- Fiscal / Bedrijfsmonitor views ---
@@ -409,8 +429,18 @@ def _run_fiscal_background(job_pk: int):
         django.setup()
     except Exception:
         logger.error("django.setup() failed in _run_fiscal_background", exc_info=True)
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE dashboard_scanjob SET status='failed', error_message='Django setup failed' WHERE id=%s",
+                    [job_pk],
+                )
+        except Exception:
+            pass
         return
 
+    close_old_connections()
     from dashboard.models import BlogArticle, ScanJob, ScanLog
 
     job = ScanJob.objects.get(pk=job_pk)
@@ -476,6 +506,20 @@ def _run_fiscal_background(job_pk: int):
             )
             article_count += 1
 
+        # Log API usage with job_pk
+        try:
+            from dashboard.services.api_usage import log_llm_usage
+            log_llm_usage(
+                service="gemini",
+                input_tokens=results.get("total_input", 0),
+                output_tokens=results.get("total_output", 0),
+                model_name="gemini-3.1-pro-preview",
+                job_pk=job_pk,
+                description="Fiscaal onderzoek",
+            )
+        except Exception:
+            logger.warning("Could not log fiscal API usage", exc_info=True)
+
         job.status = "completed"
         job.progress_message = f"Onderzoek afgerond — {article_count} concept-artikelen geschreven"
         job.finished_at = timezone.now()
@@ -488,11 +532,14 @@ def _run_fiscal_background(job_pk: int):
     except Exception as e:
         logger.error("Fiscal research failed (job=%s)", job_pk, exc_info=True)
         job.status = "failed"
-        job.error_message = f"{type(e).__name__}: {e}"
-        job.progress_message = f"Onderzoek mislukt: {e}"
+        logger.exception("Job %s failed", job.pk)
+        job.error_message = "Er is een fout opgetreden. Controleer de logs voor details."
+        job.progress_message = "Onderzoek mislukt"
         job.finished_at = timezone.now()
         job.save()
-        log_callback("error", "System", f"Onderzoek mislukt: {e}")
+        log_callback("error", "System", f"Onderzoek mislukt: {type(e).__name__}")
+    finally:
+        close_old_connections()
 
 
 # ---------------------------------------------------------------------------
@@ -500,7 +547,7 @@ def _run_fiscal_background(job_pk: int):
 # ---------------------------------------------------------------------------
 
 def sales_home(request):
-    groups = ProspectGroup.objects.annotate(
+    groups = _user_groups(request).annotate(
         prospect_count=db_models.Count("prospects"),
     )
     from django.db.models import Count, Q
@@ -520,8 +567,46 @@ def sales_home(request):
     })
 
 
+def sales_map(request):
+    groups = _user_groups(request).annotate(
+        prospect_count=Count("prospects"),
+    )
+    prospects = Prospect.objects.filter(
+        latitude__isnull=False,
+        longitude__isnull=False,
+    ).prefetch_related("groups")
+
+    prospects_data = []
+    for p in prospects:
+        prospects_data.append({
+            "slug": p.slug,
+            "name": p.name,
+            "address": p.address,
+            "phone": p.phone,
+            "email": p.email,
+            "website": p.website,
+            "status": p.status,
+            "status_display": p.get_status_display(),
+            "business_type": p.business_type,
+            "lat": float(p.latitude),
+            "lng": float(p.longitude),
+            "groups": [{"slug": g.slug, "name": g.name} for g in p.groups.all()],
+        })
+
+    no_coords_count = Prospect.objects.filter(
+        Q(latitude__isnull=True) | Q(longitude__isnull=True)
+    ).count()
+
+    return render(request, "dashboard/sales/map.html", {
+        "groups": groups,
+        "prospects_json": prospects_data,
+        "total_on_map": len(prospects_data),
+        "no_coords_count": no_coords_count,
+    })
+
+
 def sales_search(request):
-    groups = ProspectGroup.objects.all()
+    groups = _user_groups(request)
     business_types = BusinessType.objects.all()
     return render(request, "dashboard/sales/search.html", {
         "groups": groups,
@@ -535,37 +620,45 @@ def htmx_sales_search_results(request):
     location = request.POST.get("location", "").strip()
     radius_km = _safe_int(request.POST.get("radius_km"), 10)
     group_slug = request.POST.get("group_slug", "").strip()
-    max_results = _safe_int(request.POST.get("max_results"), 20)
+    search_mode = request.POST.get("search_mode", "category").strip()
+
+    is_individual = search_mode == "individual"
+    default_max = 5 if is_individual else 20
+    max_results = _safe_int(request.POST.get("max_results"), default_max)
     max_results = max(1, min(20, max_results))
 
     min_rating_raw = request.POST.get("min_rating", "").strip()
     min_rating = None
-    if min_rating_raw:
+    if min_rating_raw and not is_individual:
         try:
             min_rating = float(min_rating_raw)
         except (ValueError, TypeError):
             pass
 
     business_type = request.POST.get("business_type", "").strip()
+    if is_individual:
+        business_type = ""
 
     if not query:
         return render(request, "dashboard/sales/_search_results.html", {
-            "error": "Voer een zoekterm in.",
+            "error": "Voer een zoekterm in." if not is_individual else "Voer een bedrijfsnaam in.",
         })
 
-    # Combine query with location for better results
+    # Combine query with location for better results (both modes)
     search_query = f"{query} {location}" if location else query
 
     service = GooglePlacesService()
     api_error = None
     try:
-        results = service.text_search(
-            search_query,
-            radius_m=radius_km * 1000,
-            max_results=max_results,
-            min_rating=min_rating,
-            included_type=business_type or None,
-        )
+        kwargs = {
+            "max_results": max_results,
+            "min_rating": min_rating,
+        }
+        if not is_individual:
+            kwargs["radius_m"] = radius_km * 1000
+            kwargs["included_type"] = business_type or None
+
+        results = service.text_search(search_query, **kwargs)
     except Exception:
         logger.exception("Google Places search failed")
         results = []
@@ -574,7 +667,7 @@ def htmx_sales_search_results(request):
     # Log the search
     target_group = None
     if group_slug:
-        target_group = ProspectGroup.objects.filter(slug=group_slug).first()
+        target_group = _user_groups(request).filter(slug=group_slug).first()
 
     PlacesSearch.objects.create(
         query=query,
@@ -584,23 +677,14 @@ def htmx_sales_search_results(request):
         target_group=target_group,
     )
 
-    # Mark already-saved prospects (check both place_id and name)
-    existing_place_ids = set(
-        Prospect.objects.filter(
-            place_id__in=[r["place_id"] for r in results if r.get("place_id")]
-        ).values_list("place_id", flat=True)
-    )
-    result_names = [r["name"] for r in results if r.get("name")]
-    existing_names_lower = set(
-        Prospect.objects.annotate(name_lower=Lower("name"))
-        .filter(name_lower__in=[n.lower() for n in result_names])
-        .values_list("name_lower", flat=True)
-    )
+    # Mark already-saved prospects (shared dedup logic)
     for r in results:
-        r["already_saved"] = (
-            (r.get("place_id") and r["place_id"] in existing_place_ids)
-            or r.get("name", "").lower() in existing_names_lower
+        match = find_existing_prospect(
+            r.get("name", ""),
+            address=r.get("address", ""),
+            place_id=r.get("place_id", ""),
         )
+        r["already_saved"] = match is not None
 
     unsaved = [r for r in results if not r.get("already_saved")]
     # Encode results as JSON for bulk save (HTML-entity-safe via escapejs in template)
@@ -617,6 +701,38 @@ def htmx_sales_search_results(request):
 
 
 @require_POST
+def htmx_internal_prospect_search(request):
+    """Search existing prospects by name, address or email."""
+    query = request.POST.get("query", "").strip()
+    filter_group = request.POST.get("filter_group", "").strip()
+    filter_status = request.POST.get("filter_status", "").strip()
+
+    if not query and not filter_group and not filter_status:
+        return render(request, "dashboard/sales/_internal_search_results.html", {
+            "error": "Voer een zoekterm in of selecteer een filter.",
+        })
+
+    qs = Prospect.objects.prefetch_related("groups").select_related("assigned_template")
+    if query:
+        qs = qs.filter(
+            Q(name__icontains=query) | Q(address__icontains=query) | Q(email__icontains=query)
+        )
+    if filter_group:
+        qs = qs.filter(groups__slug=filter_group)
+    if filter_status:
+        qs = qs.filter(status=filter_status)
+
+    prospects = qs.distinct().order_by("name")[:50]
+
+    return render(request, "dashboard/sales/_internal_search_results.html", {
+        "prospects": prospects,
+        "all_groups": _user_groups(request),
+        "searched": True,
+        "result_count": len(prospects),
+    })
+
+
+@require_POST
 def htmx_prospect_save(request):
     """Save a single prospect from search results."""
     place_id = request.POST.get("place_id", "").strip()
@@ -628,13 +744,9 @@ def htmx_prospect_save(request):
             "error": "Naam is verplicht.",
         })
 
-    # Get or create prospect (check place_id, then name+address)
-    prospect = None
-    if place_id:
-        prospect = Prospect.objects.filter(place_id=place_id).first()
-    if not prospect:
-        address = request.POST.get("address", "").strip()
-        prospect = Prospect.objects.filter(name__iexact=name, address__iexact=address).first()
+    # Get or create prospect (shared dedup logic)
+    address = request.POST.get("address", "").strip()
+    prospect = find_existing_prospect(name, address=address, place_id=place_id)
 
     if not prospect:
         website = request.POST.get("website", "").strip()
@@ -685,7 +797,7 @@ def htmx_prospect_save(request):
                     prospect.contact_last_name = info.contact_last_name
                     update_fields.append("contact_last_name")
                 if not prospect.aanhef:
-                    prospect.aanhef = "Beste"
+                    prospect.aanhef = "Geachte heer/mevrouw"
                     update_fields.append("aanhef")
                 if update_fields:
                     prospect.save(update_fields=update_fields)
@@ -694,7 +806,7 @@ def htmx_prospect_save(request):
 
     # Add to group if specified
     if group_slug:
-        group = ProspectGroup.objects.filter(slug=group_slug).first()
+        group = _user_groups(request).filter(slug=group_slug).first()
         if group:
             prospect.groups.add(group)
 
@@ -743,7 +855,7 @@ def htmx_prospect_save_all(request):
             "Ongeldige data ontvangen.",
         )
 
-    group = ProspectGroup.objects.filter(slug=group_slug).first() if group_slug else None
+    group = _user_groups(request).filter(slug=group_slug).first() if group_slug else None
     saved_count = 0
 
     for r in results:
@@ -757,12 +869,8 @@ def htmx_prospect_save_all(request):
         place_id = (r.get("place_id") or "").strip()
         address = (r.get("address") or "").strip()
 
-        # Get or create (same logic as htmx_prospect_save)
-        prospect = None
-        if place_id:
-            prospect = Prospect.objects.filter(place_id=place_id).first()
-        if not prospect:
-            prospect = Prospect.objects.filter(name__iexact=name, address__iexact=address).first()
+        # Get or create (shared dedup logic)
+        prospect = find_existing_prospect(name, address=address, place_id=place_id)
 
         if not prospect:
             prospect = Prospect(
@@ -809,7 +917,7 @@ def htmx_prospect_save_all(request):
                         prospect.contact_last_name = info.contact_last_name
                         update_fields.append("contact_last_name")
                     if not prospect.aanhef:
-                        prospect.aanhef = "Beste"
+                        prospect.aanhef = "Geachte heer/mevrouw"
                         update_fields.append("aanhef")
                     if update_fields:
                         prospect.save(update_fields=update_fields)
@@ -843,7 +951,7 @@ def htmx_prospect_check_duplicate(request):
         return HttpResponse("")
 
     matches = list(Prospect.objects.filter(name__icontains=name)[:5])
-    group = ProspectGroup.objects.filter(slug=group_slug).first() if group_slug else None
+    group = _user_groups(request).filter(slug=group_slug).first() if group_slug else None
     group_prospect_ids = set()
     if group:
         group_prospect_ids = set(group.prospects.values_list("pk", flat=True))
@@ -866,33 +974,53 @@ def htmx_prospect_manual_add(request):
         resp = HttpResponse("")
         return _toast_response(resp, "error", "Naam is verplicht.")
 
-    group = ProspectGroup.objects.filter(slug=group_slug).first() if group_slug else None
+    group = _user_groups(request).filter(slug=group_slug).first() if group_slug else None
 
-    # Check for existing prospect (name + address)
+    # Check for existing prospect (shared dedup logic)
     address = request.POST.get("address", "").strip()
-    prospect = Prospect.objects.filter(name__iexact=name, address__iexact=address).first()
+    logger.info("Manual add POST data: status=%s, contact_channel=%s, assigned_template=%s, linkedin_url=%s",
+                request.POST.get("status"), request.POST.get("contact_channel"),
+                request.POST.get("assigned_template"), request.POST.get("linkedin_url"))
+    prospect = find_existing_prospect(name, address=address)
     if not prospect:
         website = request.POST.get("website", "").strip()
         if website and not website.startswith(("http://", "https://")):
             website = "https://" + website
+        linkedin_url = request.POST.get("linkedin_url", "").strip()
+        if linkedin_url and not linkedin_url.startswith(("http://", "https://")):
+            linkedin_url = "https://" + linkedin_url
+        status = request.POST.get("status", "new").strip()
+        if status not in {c[0] for c in Prospect.STATUS_CHOICES}:
+            status = "new"
+        contact_channel = request.POST.get("contact_channel", "").strip()
+        if contact_channel and contact_channel not in {c[0] for c in Prospect.CHANNEL_CHOICES}:
+            contact_channel = ""
         prospect = Prospect(
             name=name,
             address=address,
             phone=request.POST.get("phone", "").strip(),
             website=website,
+            linkedin_url=linkedin_url,
+            status=status,
+            contact_channel=contact_channel,
             notes=request.POST.get("notes", "").strip(),
             contact_first_name=request.POST.get("contact_first_name", "").strip(),
             contact_last_name=request.POST.get("contact_last_name", "").strip(),
             email=request.POST.get("email", "").strip(),
             aanhef=request.POST.get("aanhef", "").strip(),
         )
+        template_id = request.POST.get("assigned_template", "").strip()
+        if template_id:
+            prospect.assigned_template = ResponseTemplate.objects.filter(pk=template_id).first()
         prospect.save()
+        from dashboard.services.geocoding import geocode_prospect
+        geocode_prospect(prospect)
 
     if group:
         prospect.groups.add(group)
 
     # Annotate and prefetch for template
-    prospect = Prospect.objects.filter(pk=prospect.pk).prefetch_related("responses__template").annotate(
+    prospect = Prospect.objects.filter(pk=prospect.pk).select_related("assigned_template").prefetch_related("responses__template").annotate(
         has_responses=Exists(ProspectResponse.objects.filter(prospect=OuterRef("pk")))
     ).first()
 
@@ -900,6 +1028,30 @@ def htmx_prospect_manual_add(request):
         "prospect": prospect,
     })
     return _toast_response(resp, "success", f"Prospect '{prospect.name}' toegevoegd")
+
+
+@require_POST
+def htmx_geocode_prospects(request):
+    """Geocode prospects without coordinates (max 50 at a time)."""
+    from dashboard.services.geocoding import geocode_prospect
+
+    prospects = list(
+        Prospect.objects.filter(
+            Q(latitude__isnull=True) | Q(longitude__isnull=True)
+        ).exclude(address="")[:50]
+    )
+
+    geocoded = 0
+    for p in prospects:
+        if geocode_prospect(p):
+            geocoded += 1
+
+    resp = HttpResponse("")
+    resp["HX-Refresh"] = "true"
+    return _toast_response(
+        resp, "success",
+        f"{geocoded} van {len(prospects)} prospects geocoded."
+    )
 
 
 @require_POST
@@ -913,7 +1065,7 @@ def htmx_prospect_link_to_group(request):
     prospect.groups.add(group)
 
     # Annotate and prefetch for template
-    prospect = Prospect.objects.filter(pk=prospect.pk).prefetch_related("responses__template").annotate(
+    prospect = Prospect.objects.filter(pk=prospect.pk).select_related("assigned_template").prefetch_related("responses__template").annotate(
         has_responses=Exists(ProspectResponse.objects.filter(prospect=OuterRef("pk")))
     ).first()
 
@@ -929,16 +1081,17 @@ def prospect_group_create(request):
         name = request.POST.get("name", "").strip()
         description = request.POST.get("description", "").strip()
         if name:
-            group = ProspectGroup(name=name, description=description)
+            group = ProspectGroup(name=name, description=description, owner=request.user)
             group.save()
             return redirect("dashboard:prospect_group_detail", slug=group.slug)
     return render(request, "dashboard/sales/_group_form.html", {"group": None})
 
 
 def prospect_group_detail(request, slug):
-    group = get_object_or_404(ProspectGroup, slug=slug)
-    prospects = group.prospects.prefetch_related("responses__template").annotate(
+    group = _get_user_group(request, slug)
+    prospects = group.prospects.select_related("assigned_template").prefetch_related("responses__template").annotate(
         has_responses=Exists(ProspectResponse.objects.filter(prospect=OuterRef("pk"))),
+        last_sent_at=Max("responses__sent_at"),
     )
 
     status_filter = request.GET.get("status", "")
@@ -953,7 +1106,7 @@ def prospect_group_detail(request, slug):
 
 
 def prospect_group_edit(request, slug):
-    group = get_object_or_404(ProspectGroup, slug=slug)
+    group = _get_user_group(request, slug)
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
         description = request.POST.get("description", "").strip()
@@ -964,14 +1117,16 @@ def prospect_group_edit(request, slug):
             if name_changed:
                 from django.utils.text import slugify
                 group.slug = slugify(name)[:190]
-            group.save()
+                _save_with_unique_slug(group, slug_field_max=190, slug_source_attr="name")
+            else:
+                group.save()
             return redirect("dashboard:prospect_group_detail", slug=group.slug)
     return render(request, "dashboard/sales/_group_form.html", {"group": group})
 
 
 @require_POST
 def prospect_group_delete(request, slug):
-    group = get_object_or_404(ProspectGroup, slug=slug)
+    group = _get_user_group(request, slug)
     with transaction.atomic():
         group.delete()
     messages.success(request, "Groep verwijderd")
@@ -1025,6 +1180,12 @@ def htmx_prospect_status(request, slug):
     new_last = request.POST.get("contact_last_name", prospect.contact_last_name)
     new_email = request.POST.get("email", prospect.email)
     new_aanhef = request.POST.get("aanhef", prospect.aanhef)
+    new_template_id = request.POST.get("assigned_template_id", "").strip()
+
+    # Validate choice fields
+    valid_statuses = {c[0] for c in Prospect.STATUS_CHOICES}
+    if new_status not in valid_statuses:
+        new_status = prospect.status
 
     # Auto-set contacted_at on first contact
     if new_status != "new" and prospect.status == "new" and not prospect.contacted_at:
@@ -1038,10 +1199,11 @@ def htmx_prospect_status(request, slug):
     prospect.contact_last_name = new_last
     prospect.email = new_email
     prospect.aanhef = new_aanhef
+    prospect.assigned_template_id = _safe_int(new_template_id, 0) or None
     prospect.save()
 
     # Re-fetch with prefetch for response template display
-    prospect = Prospect.objects.filter(pk=prospect.pk).prefetch_related("responses__template").first()
+    prospect = Prospect.objects.filter(pk=prospect.pk).select_related("assigned_template").prefetch_related("responses__template").first()
 
     # Return OOB swap: empty modal + updated row
     row_html = render(request, "dashboard/sales/_prospect_row.html", {"prospect": prospect}).content.decode()
@@ -1049,7 +1211,8 @@ def htmx_prospect_status(request, slug):
         f'id="prospect-row-{prospect.slug}"',
         f'id="prospect-row-{prospect.slug}" hx-swap-oob="outerHTML:#prospect-row-{prospect.slug}"',
     )
-    return _toast_response(HttpResponse(oob_row), "success", "Prospect bijgewerkt")
+    response_html = f"<div></div>{oob_row}"
+    return _toast_response(HttpResponse(response_html), "success", "Prospect bijgewerkt")
 
 
 @require_POST
@@ -1057,10 +1220,9 @@ def htmx_prospect_delete(request, slug):
     prospect = get_object_or_404(Prospect, slug=slug)
     row_id = f"prospect-row-{prospect.slug}"
     prospect.delete()
-    # Empty modal + OOB remove the table row
-    response = HttpResponse(
-        f'<tr id="{row_id}" hx-swap-oob="delete:#{row_id}"></tr>'
-    )
+    # Empty primary content (clears modal) + OOB delete (removes table row)
+    oob_html = f'<tr id="{row_id}" hx-swap-oob="delete:#{row_id}"></tr>'
+    response = HttpResponse(f"<div></div>{oob_html}")
     return _toast_response(response, "success", "Prospect verwijderd")
 
 
@@ -1070,6 +1232,7 @@ def htmx_prospect_bulk_update(request):
     slugs = request.POST.getlist("slugs")
     new_status = request.POST.get("status", "").strip()
     new_channel = request.POST.get("contact_channel", "").strip()
+    new_aanhef = request.POST.get("aanhef", "").strip()
     template_id = request.POST.get("template_id", "").strip()
     group_slug = request.POST.get("group_slug", "").strip()
 
@@ -1080,7 +1243,13 @@ def htmx_prospect_bulk_update(request):
     if template_id:
         template = ResponseTemplate.objects.filter(pk=template_id).first()
 
-    prospects = Prospect.objects.filter(slug__in=slugs)
+    # Validate choice fields
+    valid_statuses = {c[0] for c in Prospect.STATUS_CHOICES}
+    if new_status and new_status not in valid_statuses:
+        new_status = ""
+
+    group = get_object_or_404(ProspectGroup, slug=group_slug)
+    prospects = group.prospects.filter(slug__in=slugs)
     updated = 0
 
     with transaction.atomic():
@@ -1095,21 +1264,49 @@ def htmx_prospect_bulk_update(request):
             if new_channel and new_channel != prospect.contact_channel:
                 prospect.contact_channel = new_channel
                 changed = True
-            if template:
-                ProspectResponse.objects.create(prospect=prospect, template=template, sent_at=timezone.now())
+            if new_aanhef and new_aanhef != prospect.aanhef:
+                prospect.aanhef = new_aanhef
+                changed = True
+            if template and prospect.assigned_template_id != template.pk:
+                prospect.assigned_template = template
                 changed = True
             if changed:
                 prospect.save()
                 updated += 1
 
     # Re-render all prospects for this group
-    group = get_object_or_404(ProspectGroup, slug=group_slug)
-    all_prospects = group.prospects.prefetch_related("responses__template").all()
+    all_prospects = group.prospects.select_related("assigned_template").prefetch_related("responses__template").all()
     rows_html = ""
     for p in all_prospects:
         rows_html += render(request, "dashboard/sales/_prospect_row.html", {"prospect": p}).content.decode()
 
     return _toast_response(HttpResponse(rows_html), "success", f"{updated} prospects bijgewerkt")
+
+
+@require_POST
+def htmx_prospect_bulk_delete(request):
+    """Bulk delete multiple prospects from a group."""
+    slugs = request.POST.getlist("slugs")
+    group_slug = request.POST.get("group_slug", "").strip()
+
+    if not slugs:
+        return _toast_response(HttpResponse(""), "error", "Geen prospects geselecteerd.")
+
+    group = _get_user_group(request, group_slug)
+    deleted_count = group.prospects.filter(slug__in=slugs).delete()[0]
+
+    # Check if group still has prospects
+    remaining = group.prospects.select_related("assigned_template").prefetch_related("responses__template").all()
+    if not remaining.exists():
+        response = HttpResponse("")
+        response["HX-Redirect"] = "/sales/"
+        return response
+
+    rows_html = ""
+    for p in remaining:
+        rows_html += render(request, "dashboard/sales/_prospect_row.html", {"prospect": p}).content.decode()
+
+    return _toast_response(HttpResponse(rows_html), "success", f"{deleted_count} prospects verwijderd")
 
 
 # ===================================================================
@@ -1120,16 +1317,16 @@ def htmx_prospect_bulk_update(request):
 def bulk_email_preview(request):
     """Preview page for bulk email sending."""
     slugs = request.POST.getlist("slugs")
-    template_id = request.POST.get("template_id", "")
+    template_id = request.POST.get("template_id", "").strip()
     group_slug = request.POST.get("group_slug", "")
 
-    if not slugs or not template_id or not group_slug:
+    if not slugs or not group_slug:
         messages.error(request, "Ongeldige selectie.")
         return redirect("dashboard:sales_home")
 
     group = get_object_or_404(ProspectGroup, slug=group_slug)
-    template = get_object_or_404(ResponseTemplate, pk=template_id)
-    prospects = Prospect.objects.filter(slug__in=slugs)
+    template = ResponseTemplate.objects.filter(pk=template_id).first() if template_id else None
+    prospects = Prospect.objects.filter(slug__in=slugs).select_related("assigned_template")
 
     # Check email settings
     from accounts.models import EmailSettings
@@ -1138,16 +1335,68 @@ def bulk_email_preview(request):
 
     previews = []
     with_email = 0
+    skipped = 0
+    dedup_cutoff = timezone.now() - timedelta(hours=24)
     for p in prospects:
+        tpl = template or p.assigned_template
+        if not tpl:
+            skipped += 1
+            continue
         has_email = bool(p.email)
         if has_email:
             with_email += 1
-        subject, body, _ = template.interpolate(p)
+        subject, body, html_body = tpl.interpolate(p)
+        text_preview = ResponseTemplate.strip_html_to_text(html_body) if html_body else body
+        recently_sent = ProspectResponse.objects.filter(
+            prospect=p, template=tpl, sent_at__gte=dedup_cutoff
+        ).exists() if has_email else False
         previews.append({
             "prospect": p,
             "has_email": has_email,
             "subject": subject,
             "body": body,
+            "text_preview": text_preview,
+            "html_body": html_body,
+            "has_html": bool(html_body),
+            "aanhef": p.aanhef,
+            "template": tpl,
+            "recently_sent": recently_sent,
+        })
+
+    if not previews:
+        messages.error(request, "Geen prospects met een template gevonden. Wijs eerst een template toe via 'Toepassen'.")
+        return redirect("dashboard:prospect_group_detail", slug=group_slug)
+
+    # --- Link validation: check external URLs in templates (max 10, with timeout) ---
+    import re as _re
+    import requests as _requests
+    _MAX_LINK_CHECKS = 10
+    seen_urls: set[str] = set()
+    for item in previews:
+        content = item.get("html_body") or item.get("body") or ""
+        for url in _re.findall(r'https?://(?:www\.)?fenofin\.nl[^\s"<>\'&]*', content):
+            seen_urls.add(url)
+    link_results = []
+    has_broken_links = False
+    for url in sorted(seen_urls)[:_MAX_LINK_CHECKS]:
+        try:
+            resp = _requests.head(url, timeout=3, allow_redirects=True)
+            ok = resp.status_code == 200
+        except Exception:
+            ok = False
+            resp = None
+        if not ok:
+            has_broken_links = True
+        link_results.append({
+            "url": url,
+            "status": resp.status_code if resp else 0,
+            "ok": ok,
+        })
+    if len(seen_urls) > _MAX_LINK_CHECKS:
+        link_results.append({
+            "url": f"... en {len(seen_urls) - _MAX_LINK_CHECKS} meer (niet gecontroleerd)",
+            "status": 0,
+            "ok": True,
         })
 
     return render(request, "dashboard/sales/bulk_email_preview.html", {
@@ -1157,19 +1406,85 @@ def bulk_email_preview(request):
         "total_count": len(previews),
         "with_email_count": with_email,
         "without_email_count": len(previews) - with_email,
+        "skipped_count": skipped,
         "email_configured": email_configured,
         "from_address": email_settings.from_header if email_configured else "",
+        "aanhef_choices": Prospect.AANHEF_CHOICES,
+        "link_results": link_results,
+        "has_broken_links": has_broken_links,
     })
 
 
+@xframe_options_sameorigin
+def bulk_email_prospect_preview(request, slug):
+    """Render interpolated HTML email for a single prospect (shown in iframe)."""
+    template_id = request.GET.get("template_id", "").strip()
+    prospect = get_object_or_404(Prospect.objects.select_related("assigned_template"), slug=slug)
+    if template_id:
+        template = get_object_or_404(ResponseTemplate, pk=template_id)
+    elif prospect.assigned_template:
+        template = prospect.assigned_template
+    else:
+        return HttpResponse("<p>Geen template toegewezen.</p>")
+    _, body, html_body = template.interpolate(prospect)
+    if html_body:
+        return HttpResponse(html_body)
+    plain_html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        "<style>body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;padding:20px;color:#333;line-height:1.7;}</style>"
+        "</head><body>"
+        f"<div style='white-space:pre-line'>{html_escape(body)}</div>"
+        "</body></html>"
+    )
+    return HttpResponse(plain_html)
+
+
 @require_POST
+def htmx_send_test_email(request):
+    """Send a test email to the logged-in user's own address."""
+    template_id = request.POST.get("template_id", "")
+    prospect_slug = request.POST.get("prospect_slug", "")
+
+    if not template_id or not prospect_slug:
+        return _toast_response(HttpResponse(""), "error", "Ongeldige selectie.")
+
+    from accounts.models import EmailSettings
+    try:
+        email_settings = EmailSettings.objects.get(user=request.user)
+    except EmailSettings.DoesNotExist:
+        return _toast_response(HttpResponse(""), "error", "E-mail instellingen ontbreken.")
+
+    if not email_settings.is_configured:
+        return _toast_response(HttpResponse(""), "error", "E-mail instellingen niet geconfigureerd.")
+
+    prospect = get_object_or_404(Prospect, slug=prospect_slug)
+    template = get_object_or_404(ResponseTemplate, pk=template_id)
+    subject, body, html_tpl = template.interpolate(prospect)
+
+    if html_tpl:
+        html_body = html_tpl
+    else:
+        html_body = f"<html><body><div style='white-space:pre-line; font-family:sans-serif'>{html_escape(body)}</div></body></html>"
+
+    from accounts.services.email_backend import send_email_from_settings
+    try:
+        send_email_from_settings(email_settings, email_settings.smtp_user, f"[TEST] {subject}", body, html_body)
+    except Exception as exc:
+        logger.exception("Test email failed")
+        return _toast_response(HttpResponse(""), "error", "Verzenden mislukt. Controleer de e-mailinstellingen.")
+
+    return _toast_response(HttpResponse(""), "success", f"Test e-mail verzonden naar {email_settings.smtp_user}")
+
+
+@require_POST
+@ratelimit(key="user_or_ip", rate="5/h", method="POST", block=True)
 def htmx_bulk_email_send(request):
     """Send bulk emails in background thread."""
     slugs = request.POST.getlist("slugs")
-    template_id = request.POST.get("template_id", "")
+    template_id = request.POST.get("template_id", "").strip()
     group_slug = request.POST.get("group_slug", "")
 
-    if not slugs or not template_id:
+    if not slugs:
         return _toast_response(HttpResponse(""), "error", "Ongeldige selectie.")
 
     from accounts.models import EmailSettings
@@ -1181,15 +1496,19 @@ def htmx_bulk_email_send(request):
     if not email_settings.is_configured:
         return _toast_response(HttpResponse(""), "error", "E-mail instellingen incompleet.")
 
-    template = get_object_or_404(ResponseTemplate, pk=template_id)
-    prospects = Prospect.objects.filter(slug__in=slugs).exclude(email="")
+    template = ResponseTemplate.objects.filter(pk=template_id).first() if template_id else None
+    # Only allow sending to prospects in groups owned by the current user
+    user_group_pks = _user_groups(request).values_list("pk", flat=True)
+    prospects = Prospect.objects.filter(
+        slug__in=slugs, groups__pk__in=user_group_pks,
+    ).exclude(email="").select_related("assigned_template").distinct()
     prospect_pks = list(prospects.values_list("pk", flat=True))
 
     if not prospect_pks:
         return _toast_response(HttpResponse(""), "error", "Geen prospects met e-mailadres gevonden.")
 
     # Submit to background thread
-    _scan_executor.submit(_send_bulk_emails, prospect_pks, template.pk, email_settings.pk)
+    _scan_executor.submit(_send_bulk_emails, prospect_pks, template.pk if template else None, email_settings.pk)
 
     response = HttpResponse("")
     response["HX-Redirect"] = f"/sales/groepen/{group_slug}/" if group_slug else "/sales/"
@@ -1205,19 +1524,27 @@ def _send_bulk_emails(prospect_pks, template_pk, email_settings_pk):
 
     try:
         es = EmailSettings.objects.get(pk=email_settings_pk)
-        template = ResponseTemplate.objects.get(pk=template_pk)
-        prospects = Prospect.objects.filter(pk__in=prospect_pks)
-
-        from django.conf import settings as django_settings
-        from .services.email_tracking import prepare_tracked_email
+        global_template = ResponseTemplate.objects.filter(pk=template_pk).first() if template_pk else None
+        prospects = Prospect.objects.filter(pk__in=prospect_pks).select_related("assigned_template")
 
         for prospect in prospects:
             try:
+                template = global_template or prospect.assigned_template
+                if not template:
+                    logger.warning("Skipping %s: no template", prospect.name)
+                    continue
                 subject, body, html_tpl = template.interpolate(prospect)
                 if html_tpl:
                     html_body = html_tpl
                 else:
                     html_body = f"<html><body><div style='white-space:pre-line; font-family:sans-serif'>{html_escape(body)}</div></body></html>"
+
+                # Dedup warning (no longer blocks — user decides in preview)
+                cutoff = timezone.now() - timedelta(hours=24)
+                if ProspectResponse.objects.filter(
+                    prospect=prospect, template=template, sent_at__gte=cutoff
+                ).exists():
+                    logger.warning("Opnieuw verzenden naar %s (al gemaild in afgelopen 24u)", prospect.name)
 
                 pr = ProspectResponse.objects.create(
                     prospect=prospect,
@@ -1226,24 +1553,20 @@ def _send_bulk_emails(prospect_pks, template_pk, email_settings_pk):
                     notes="Bezig met verzenden...",
                 )
 
-                tracked_html = prepare_tracked_email(
-                    html_body,
-                    str(pr.tracking_token),
-                    django_settings.TRACKING_BASE_URL,
-                )
-
-                send_email_from_settings(es, prospect.email, subject, body, tracked_html)
+                send_email_from_settings(es, prospect.email, subject, body, html_body)
 
                 pr.sent_at = timezone.now()
                 pr.notes = "Verzonden per e-mail"
                 pr.save()
 
-                if prospect.status in ("new", "not_contacted"):
-                    prospect.status = "contacted"
-                    prospect.contact_channel = "email"
-                    if not prospect.contacted_at:
-                        prospect.contacted_at = timezone.now()
-                    prospect.save()
+                with transaction.atomic():
+                    p = Prospect.objects.select_for_update().get(pk=prospect.pk)
+                    if p.status in ("new", "not_contacted"):
+                        p.status = "contacted"
+                        p.contact_channel = "email"
+                        if not p.contacted_at:
+                            p.contacted_at = timezone.now()
+                        p.save(update_fields=["status", "contact_channel", "contacted_at"])
 
                 time.sleep(0.3)
 
@@ -1475,12 +1798,9 @@ def response_template_move(request, pk, direction):
 # ---------------------------------------------------------------------------
 
 def _render_categories_partial(request):
-    categories = TemplateCategory.objects.prefetch_related("templates")
-    response = render(request, "dashboard/sales/_categories.html", {
-        "categories": categories,
-        "color_choices": TemplateCategory.COLOR_CHOICES,
-    })
-    return _toast_response(response, "success", "Categorieën bijgewerkt")
+    response = HttpResponse(status=204)
+    response["HX-Redirect"] = reverse("dashboard:sales_templates")
+    return response
 
 
 @require_POST
@@ -1505,6 +1825,17 @@ def template_category_edit(request, pk):
 def template_category_delete(request, pk):
     TemplateCategory.objects.filter(pk=pk).delete()
     return _render_categories_partial(request)
+
+
+@require_POST
+def htmx_template_set_category(request, pk):
+    tpl = get_object_or_404(ResponseTemplate, pk=pk)
+    cat_id = request.POST.get("category", "")
+    tpl.category = TemplateCategory.objects.filter(pk=cat_id).first() if cat_id else None
+    tpl.save()
+    response = HttpResponse(status=204)
+    response["HX-Redirect"] = reverse("dashboard:sales_templates")
+    return response
 
 
 @require_POST
@@ -1565,7 +1896,7 @@ def htmx_prospect_scrape_email(request, slug):
         prospect.contact_last_name = info.contact_last_name
         update_fields.append("contact_last_name")
     if not prospect.aanhef:
-        prospect.aanhef = "Beste"
+        prospect.aanhef = "Geachte heer/mevrouw"
         update_fields.append("aanhef")
     if update_fields:
         prospect.save(update_fields=update_fields)
@@ -1662,8 +1993,8 @@ def _send_fiscal_summary_email(articles: list[dict], log_callback):
 # Team Builder views
 # ===================================================================
 
-from .crew_builder import SUGGESTED_MODELS
-from .tool_registry import get_tool_choices, TOOL_REGISTRY
+from .constants import PROVIDER_CONFIG, SUGGESTED_MODELS
+from .tool_registry import get_tool_choices, get_tools_by_category, TOOL_REGISTRY
 
 
 def _team_detail_context(team):
@@ -1671,24 +2002,108 @@ def _team_detail_context(team):
     active_job = ScanJob.objects.filter(
         team=team, status__in=["pending", "running"]
     ).first()
+    if not active_job:
+        # Show last completed/failed job so reports remain visible
+        active_job = ScanJob.objects.filter(
+            team=team, status__in=["completed", "failed"]
+        ).first()
+
+    # Provider info for model configuration section
+    provider_meta = {
+        "gemini": {"label": "Gemini", "border_class": "border-blue-200", "text_class": "text-blue-700"},
+        "anthropic": {"label": "Anthropic", "border_class": "border-orange-200", "text_class": "text-orange-700"},
+        "openai": {"label": "OpenAI", "border_class": "border-green-200", "text_class": "text-green-700"},
+    }
+    provider_info = []
+    for key, cfg in PROVIDER_CONFIG.items():
+        meta = provider_meta.get(key, {})
+        provider_info.append({
+            "key": key,
+            "label": meta.get("label", key),
+            "border_class": meta.get("border_class", "border-gray-200"),
+            "text_class": meta.get("text_class", "text-gray-700"),
+            "has_key": bool(os.environ.get(cfg["env_key"], "")),
+            "env_key": cfg["env_key"],
+            "models": SUGGESTED_MODELS.get(key, []),
+        })
+
     return {
         "team": team,
         "variables": team.variables.all(),
         "agents": team.agents.all(),
-        "tasks": team.tasks.all(),
+        "manager": team.agents.filter(is_manager=True).first(),
+        "workers": team.agents.filter(is_manager=False).order_by("order"),
+        "tasks": team.tasks.select_related("agent").prefetch_related("context_tasks"),
         "active_job": active_job,
         "active_job_logs": active_job.logs.all() if active_job else [],
+        "task_outputs": active_job.task_outputs.all() if active_job and active_job.status == "completed" else [],
         "tool_choices": get_tool_choices(),
+        "tool_choices_grouped": get_tools_by_category(),
         "tool_registry": TOOL_REGISTRY,
         "provider_choices": TeamAgent.PROVIDER_CHOICES,
         "suggested_models": SUGGESTED_MODELS,
+        "provider_info": provider_info,
     }
+
+
+# --- AI Configuration ---
+
+def ai_config(request):
+    """AI Configuration page: providers, models, and tools overview."""
+    from .tool_registry import get_tools_by_category
+
+    provider_meta = {
+        "gemini": {"label": "Gemini", "border_class": "border-blue-200", "text_class": "text-blue-700", "bg_class": "bg-blue-50"},
+        "anthropic": {"label": "Anthropic", "border_class": "border-orange-200", "text_class": "text-orange-700", "bg_class": "bg-orange-50"},
+        "openai": {"label": "OpenAI", "border_class": "border-green-200", "text_class": "text-green-700", "bg_class": "bg-green-50"},
+    }
+    provider_info = []
+    for key, cfg in PROVIDER_CONFIG.items():
+        meta = provider_meta.get(key, {})
+        provider_info.append({
+            "key": key,
+            "label": meta.get("label", key),
+            "border_class": meta.get("border_class", "border-gray-200"),
+            "text_class": meta.get("text_class", "text-gray-700"),
+            "bg_class": meta.get("bg_class", "bg-gray-50"),
+            "has_key": bool(os.environ.get(cfg["env_key"], "")),
+            "env_key": cfg["env_key"],
+            "models": SUGGESTED_MODELS.get(key, []),
+        })
+
+    return render(request, "dashboard/ai_config.html", {
+        "provider_info": provider_info,
+        "tool_categories": get_tools_by_category(),
+        "tool_count": len(TOOL_REGISTRY),
+    })
+
+
+# --- Ownership helpers ---
+
+def _user_teams(request):
+    """Return teams owned by the current user (or unowned legacy teams)."""
+    return Team.objects.filter(Q(owner=request.user) | Q(owner__isnull=True))
+
+
+def _get_user_team(request, slug):
+    """Get a team ensuring the current user has access."""
+    return get_object_or_404(Team, slug=slug, owner__in=[request.user, None])
+
+
+def _user_groups(request):
+    """Return prospect groups owned by the current user (or unowned legacy groups)."""
+    return ProspectGroup.objects.filter(Q(owner=request.user) | Q(owner__isnull=True))
+
+
+def _get_user_group(request, slug):
+    """Get a prospect group ensuring the current user has access."""
+    return get_object_or_404(ProspectGroup, slug=slug, owner__in=[request.user, None])
 
 
 # --- Team CRUD ---
 
 def team_list(request):
-    teams = Team.objects.annotate(
+    teams = _user_teams(request).annotate(
         agent_count=db_models.Count("agents"),
         task_count=db_models.Count("tasks"),
     )
@@ -1702,29 +2117,40 @@ def team_create(request):
         return render(request, "dashboard/teams/team_list.html", {
             "teams": Team.objects.all(), "error": "Naam is verplicht.",
         })
-    team = Team(name=name)
+    team = Team(name=name, owner=request.user)
     team.save()
     return redirect("dashboard:team_detail", slug=team.slug)
 
 
 def team_detail(request, slug):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     ctx = _team_detail_context(team)
     return render(request, "dashboard/teams/team_detail.html", ctx)
 
 
 @require_POST
 def team_delete(request, slug):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     team.delete()
     messages.success(request, "Team verwijderd")
     return redirect("dashboard:team_list")
 
 
 @require_POST
+def team_bulk_delete(request):
+    slugs = request.POST.getlist("slugs")
+    if slugs:
+        qs = _user_teams(request).filter(slug__in=slugs)
+        count = qs.count()
+        qs.delete()
+        messages.success(request, f"{count} team(s) verwijderd")
+    return redirect("dashboard:team_list")
+
+
+@require_POST
 def team_update(request, slug):
     """HTMX: update team header fields."""
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     team.name = request.POST.get("name", team.name).strip() or team.name
     team.description = request.POST.get("description", team.description)
     process = request.POST.get("process", team.process)
@@ -1739,10 +2165,17 @@ def team_update(request, slug):
 
 @require_POST
 def team_variable_add(request, slug):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     name = request.POST.get("name", "").strip()
     if name:
         max_order = team.variables.aggregate(m=db_models.Max("order"))["m"] or 0
+        options = []
+        options_raw = request.POST.get("options", "").strip()
+        if options_raw:
+            try:
+                options = json.loads(options_raw)
+            except (json.JSONDecodeError, ValueError):
+                options = []
         TeamVariable.objects.create(
             team=team,
             name=name,
@@ -1750,6 +2183,7 @@ def team_variable_add(request, slug):
             description=request.POST.get("description", "").strip(),
             input_type=request.POST.get("input_type", "text"),
             default_value=request.POST.get("default_value", ""),
+            options=options,
             required="required" in request.POST,
             order=max_order + 1,
         )
@@ -1760,22 +2194,98 @@ def team_variable_add(request, slug):
 
 @require_POST
 def team_variable_edit(request, slug, pk):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     var = get_object_or_404(TeamVariable, pk=pk, team=team)
-    var.name = request.POST.get("name", var.name).strip() or var.name
-    var.label = request.POST.get("label", var.label).strip()
-    var.description = request.POST.get("description", var.description)
-    var.input_type = request.POST.get("input_type", var.input_type)
-    var.default_value = request.POST.get("default_value", var.default_value)
-    var.required = "required" in request.POST
+    # Alleen velden updaten die daadwerkelijk in de POST zitten
+    if "name" in request.POST:
+        var.name = request.POST["name"].strip() or var.name
+    if "label" in request.POST:
+        var.label = request.POST["label"].strip()
+    if "description" in request.POST:
+        var.description = request.POST["description"]
+    if "input_type" in request.POST:
+        var.input_type = request.POST["input_type"]
+    if "default_value" in request.POST:
+        var.default_value = request.POST["default_value"]
+    if "options" in request.POST:
+        options_raw = request.POST["options"].strip()
+        if options_raw:
+            try:
+                var.options = json.loads(options_raw)
+            except (json.JSONDecodeError, ValueError):
+                pass  # Ongeldige JSON, negeer
+        else:
+            var.options = []
+    # required alleen wijzigen bij volledig edit formulier (heeft altijd "name")
+    if "name" in request.POST:
+        var.required = "required" in request.POST
     var.save()
     ctx = _team_detail_context(team)
     return render(request, "dashboard/teams/_variables.html", ctx)
 
 
 @require_POST
+def team_variable_upload(request, slug, pk):
+    """Upload een PDF-bestand en sla het pad op als default_value."""
+    import re as _re
+    import uuid as _uuid
+    from pathlib import Path as _Path
+
+    team = _get_user_team(request, slug)
+    var = get_object_or_404(TeamVariable, pk=pk, team=team)
+
+    uploaded = request.FILES.get("file")
+    if not uploaded:
+        ctx = _team_detail_context(team)
+        return _toast_response(
+            render(request, "dashboard/teams/_variables.html", ctx),
+            "error", "Geen bestand geselecteerd",
+        )
+
+    if not uploaded.name.lower().endswith(".pdf"):
+        ctx = _team_detail_context(team)
+        return _toast_response(
+            render(request, "dashboard/teams/_variables.html", ctx),
+            "error", "Alleen PDF-bestanden zijn toegestaan",
+        )
+
+    if uploaded.size > 50 * 1024 * 1024:
+        ctx = _team_detail_context(team)
+        return _toast_response(
+            render(request, "dashboard/teams/_variables.html", ctx),
+            "error", "Bestand is groter dan 50 MB",
+        )
+
+    # Verify PDF magic bytes
+    first_bytes = uploaded.read(5)
+    uploaded.seek(0)
+    if not first_bytes.startswith(b"%PDF-"):
+        ctx = _team_detail_context(team)
+        return _toast_response(
+            render(request, "dashboard/teams/_variables.html", ctx),
+            "error", "Ongeldig PDF-bestand",
+        )
+
+    upload_dir = _Path(settings.MEDIA_ROOT) / "teams" / team.slug
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    # Sanitize: verwijder alleen path-gevaarlijke tekens, behoud spaties en unicode
+    clean_name = _re.sub(r'[<>:"/\\|?*]', '_', uploaded.name)
+    safe_name = f"{_uuid.uuid4().hex[:8]}_{clean_name}"
+    file_path = upload_dir / safe_name
+    with open(file_path, "wb") as f:
+        for chunk in uploaded.chunks():
+            f.write(chunk)
+    var.default_value = str(file_path)
+    var.save()
+
+    ctx = _team_detail_context(team)
+    response = render(request, "dashboard/teams/_variables.html", ctx)
+    return _toast_response(response, "success", f"Bestand geupload: {uploaded.name}")
+
+
+@require_POST
 def team_variable_delete(request, slug, pk):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     TeamVariable.objects.filter(pk=pk, team=team).delete()
     ctx = _team_detail_context(team)
     response = render(request, "dashboard/teams/_variables.html", ctx)
@@ -1786,23 +2296,32 @@ def team_variable_delete(request, slug, pk):
 
 @require_POST
 def team_agent_add(request, slug):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     role = request.POST.get("role", "").strip()
     if role:
         max_order = team.agents.aggregate(m=db_models.Max("order"))["m"] or 0
-        tools = request.POST.getlist("tools")
-        TeamAgent.objects.create(
-            team=team,
-            order=max_order + 1,
-            role=role,
-            goal=request.POST.get("goal", ""),
-            backstory=request.POST.get("backstory", ""),
-            llm_provider=request.POST.get("llm_provider", "gemini"),
-            llm_model=request.POST.get("llm_model", "gemini-3-flash-preview"),
-            tools=tools,
-            max_iter=_safe_int(request.POST.get("max_iter", 25), 25),
-            verbose=True,
-        )
+        valid_tool_ids = set(TOOL_REGISTRY.keys())
+        tools = [t for t in request.POST.getlist("tools") if t in valid_tool_ids]
+        is_manager = "is_manager" in request.POST
+        if is_manager:
+            tools = []  # CrewAI: manager agents cannot have tools
+        max_iter = min(_safe_int(request.POST.get("max_iter", 25), 25), 200)
+        with transaction.atomic():
+            if is_manager:
+                team.agents.update(is_manager=False)
+            TeamAgent.objects.create(
+                team=team,
+                order=max_order + 1,
+                role=role,
+                goal=request.POST.get("goal", ""),
+                backstory=request.POST.get("backstory", ""),
+                llm_provider=request.POST.get("llm_provider", "gemini"),
+                llm_model=request.POST.get("llm_model", "gemini-3-flash-preview"),
+                tools=tools,
+                max_iter=max_iter,
+                verbose=True,
+                is_manager=is_manager,
+            )
     ctx = _team_detail_context(team)
     response = render(request, "dashboard/teams/_agents_and_tasks.html", ctx)
     return _toast_response(response, "success", "Agent toegevoegd")
@@ -1810,34 +2329,55 @@ def team_agent_add(request, slug):
 
 @require_POST
 def team_agent_edit(request, slug, pk):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     agent = get_object_or_404(TeamAgent, pk=pk, team=team)
     agent.role = request.POST.get("role", agent.role).strip() or agent.role
     agent.goal = request.POST.get("goal", agent.goal)
     agent.backstory = request.POST.get("backstory", agent.backstory)
     agent.llm_provider = request.POST.get("llm_provider", agent.llm_provider)
     agent.llm_model = request.POST.get("llm_model", agent.llm_model)
-    agent.tools = request.POST.getlist("tools")
-    agent.max_iter = _safe_int(request.POST.get("max_iter", agent.max_iter), agent.max_iter)
-    agent.save()
+    valid_tool_ids = set(TOOL_REGISTRY.keys())
+    agent.tools = [t for t in request.POST.getlist("tools") if t in valid_tool_ids]
+    agent.max_iter = min(_safe_int(request.POST.get("max_iter", agent.max_iter), agent.max_iter), 200)
+    agent.is_manager = "is_manager" in request.POST
+    if agent.is_manager:
+        agent.tools = []  # CrewAI: manager agents cannot have tools
+    with transaction.atomic():
+        if agent.is_manager:
+            team.agents.exclude(pk=agent.pk).update(is_manager=False)
+        agent.save()
     ctx = _team_detail_context(team)
     return render(request, "dashboard/teams/_agents_and_tasks.html", ctx)
 
 
 @require_POST
 def team_agent_delete(request, slug, pk):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     TeamAgent.objects.filter(pk=pk, team=team).delete()
     ctx = _team_detail_context(team)
     response = render(request, "dashboard/teams/_agents_and_tasks.html", ctx)
     return _toast_response(response, "success", "Agent verwijderd")
 
 
+@require_POST
+def team_agent_set_manager(request, slug, pk):
+    team = _get_user_team(request, slug)
+    agent = get_object_or_404(TeamAgent, pk=pk, team=team)
+    with transaction.atomic():
+        team.agents.update(is_manager=False)
+        agent.is_manager = True
+        agent.tools = []  # CrewAI: manager agents cannot have tools
+        agent.save(update_fields=["is_manager", "tools"])
+    ctx = _team_detail_context(team)
+    response = render(request, "dashboard/teams/_agents_and_tasks.html", ctx)
+    return _toast_response(response, "success", f"{agent.role} is nu hoofdagent")
+
+
 # --- Task CRUD ---
 
 @require_POST
 def team_task_add(request, slug):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     description = request.POST.get("description", "").strip()
     agent_pk = request.POST.get("agent", "")
     if description and agent_pk:
@@ -1860,7 +2400,7 @@ def team_task_add(request, slug):
 
 @require_POST
 def team_task_edit(request, slug, pk):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     task = get_object_or_404(TeamTask, pk=pk, team=team)
     task.description = request.POST.get("description", task.description)
     task.expected_output = request.POST.get("expected_output", task.expected_output)
@@ -1876,7 +2416,7 @@ def team_task_edit(request, slug, pk):
 
 @require_POST
 def team_task_delete(request, slug, pk):
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     TeamTask.objects.filter(pk=pk, team=team).delete()
     ctx = _team_detail_context(team)
     response = render(request, "dashboard/teams/_agents_and_tasks.html", ctx)
@@ -1889,13 +2429,13 @@ def team_task_delete(request, slug, pk):
 @require_POST
 def team_run(request, slug):
     """Start a team run with provided variables."""
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
 
-    # Collect variable values from form
+    # Collect variable values from saved default_values
+    # File uploads are handled separately via team_variable_upload
     run_variables = {}
     for var in team.variables.all():
-        val = request.POST.get(f"var_{var.name}", var.default_value)
-        run_variables[var.name] = val
+        run_variables[var.name] = var.default_value
 
     with transaction.atomic():
         active = ScanJob.objects.select_for_update().filter(
@@ -1923,7 +2463,7 @@ def team_run(request, slug):
 
 def team_run_status(request, slug, pk):
     """HTMX polling endpoint for team run progress."""
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     job = get_object_or_404(ScanJob, pk=pk)
     logs = job.logs.all()
 
@@ -1949,7 +2489,7 @@ def team_run_status(request, slug, pk):
 @require_POST
 def team_run_stop(request, slug, pk):
     """Stop a running team job."""
-    team = get_object_or_404(Team, slug=slug)
+    team = _get_user_team(request, slug)
     job = get_object_or_404(ScanJob, pk=pk)
     if job.status in ("pending", "running"):
         job.status = "failed"
@@ -1967,17 +2507,128 @@ def team_run_stop(request, slug, pk):
     return _toast_response(response, "warning", "Team run gestopt")
 
 
+def team_run_dismiss(request, slug, pk):
+    """Dismiss the current job result and show the run form again."""
+    team = _get_user_team(request, slug)
+    ctx = _team_detail_context(team)
+    ctx["active_job"] = None
+    ctx["active_job_logs"] = []
+    ctx["task_outputs"] = []
+    return render(request, "dashboard/teams/_run_status.html", ctx)
+
+
+def _pdf_safe_text(text):
+    """Replace emoji characters with text equivalents for PDF rendering."""
+    return (text
+        .replace("\u2705", "[OK]")       # ✅
+        .replace("\u274c", "[FOUT]")     # ❌
+        .replace("\u26a0\ufe0f", "[LET OP]")  # ⚠️
+        .replace("\u26a0", "[LET OP]")   # ⚠
+        .replace("\u2713", "[OK]")       # ✓
+        .replace("\u2717", "[FOUT]")     # ✗
+        .replace("\u2714", "[OK]")       # ✔
+        .replace("\u2718", "[FOUT]")     # ✘
+    )
+
+
+def team_run_pdf(request, slug, pk):
+    """Generate a PDF report from task outputs of a completed team run."""
+    import weasyprint
+    from dashboard.templatetags.report_filters import render_markdown as md_filter
+
+    team = _get_user_team(request, slug)
+    job = get_object_or_404(ScanJob, pk=pk, team=team, status="completed")
+    outputs = job.task_outputs.all()
+
+    if not outputs:
+        return HttpResponse("Geen rapporten beschikbaar voor deze run.", status=404)
+
+    # Build HTML document for PDF
+    sections_html = ""
+    for to in outputs:
+        rendered = md_filter(_pdf_safe_text(to.output))
+        sections_html += f"""
+        <div class="section">
+            <div class="section-header">
+                <span class="badge">{to.task_order + 1}</span>
+                <span class="agent-name">{to.agent_name}</span>
+            </div>
+            <div class="content">{rendered}</div>
+        </div>
+        """
+
+    finished = job.finished_at.strftime("%d-%m-%Y %H:%M") if job.finished_at else ""
+    html_content = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+    @page {{
+        size: A4; margin: 2cm 2.5cm;
+        @bottom-center {{ content: counter(page) " / " counter(pages); font-size: 9px; color: #999; }}
+    }}
+    body {{ font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 11pt; color: #1a1a2e; line-height: 1.6; }}
+    .header {{ border-bottom: 3px solid #4338ca; padding-bottom: 12px; margin-bottom: 24px; }}
+    .header h1 {{ font-size: 20pt; color: #312e81; margin: 0 0 4px 0; }}
+    .header .meta {{ font-size: 9pt; color: #6b7280; }}
+    .section {{ margin-bottom: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px; }}
+    .section:first-child {{ border-top: none; padding-top: 0; }}
+    .section-header {{ background: #f1f5f9; padding: 8px 14px; border-radius: 6px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; page-break-after: avoid; }}
+    .badge {{ background: #e0e7ff; color: #4338ca; font-weight: 700; width: 24px; height: 24px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 10pt; }}
+    .agent-name {{ font-weight: 600; font-size: 11pt; color: #1e293b; }}
+    .content {{ padding: 0 4px; page-break-before: avoid; }}
+    .content h1 {{ font-size: 15pt; color: #312e81; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-top: 16px; }}
+    .content h2 {{ font-size: 13pt; color: #4338ca; margin-top: 14px; }}
+    .content h3 {{ font-size: 11pt; color: #475569; margin-top: 12px; }}
+    .content p {{ margin: 6px 0; }}
+    .content ul, .content ol {{ padding-left: 20px; margin: 6px 0; }}
+    .content li {{ margin: 3px 0; }}
+    .content table {{ border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 10pt; }}
+    .content th {{ background: #f8fafc; font-weight: 600; border-bottom: 2px solid #e2e8f0; padding: 6px 8px; text-align: left; }}
+    .content td {{ padding: 5px 8px; border-bottom: 1px solid #f1f5f9; }}
+    .content code {{ background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 9pt; }}
+    .content pre {{ background: #f8fafc; padding: 10px; border-radius: 6px; font-size: 9pt; overflow-wrap: break-word; white-space: pre-wrap; }}
+</style>
+</head><body>
+    <div class="header">
+        <h1>{team.name}</h1>
+        <div class="meta">Rapport gegenereerd op {finished} &bull; {outputs.count()} onderdelen</div>
+    </div>
+    {sections_html}
+</body></html>"""
+
+    pdf = weasyprint.HTML(string=html_content).write_pdf()
+    response = HttpResponse(pdf, content_type="application/pdf")
+    safe_name = team.slug
+    response["Content-Disposition"] = f'inline; filename="{safe_name}-rapport.pdf"'
+    return response
+
+
 # --- Background team run ---
 
 def _run_custom_team_background(job_pk: int, team_pk: int, run_variables: dict):
     """Run a custom Team crew in a background thread."""
+    import sys
+    # Fix stdout if closed by a previous CrewAI run
+    try:
+        sys.stdout.isatty()
+    except (ValueError, AttributeError, OSError):
+        sys.stdout = sys.__stdout__
     try:
         import django
         django.setup()
     except Exception:
         logger.error("django.setup() failed in _run_custom_team_background", exc_info=True)
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE dashboard_scanjob SET status='failed', error_message='Django setup failed' WHERE id=%s",
+                    [job_pk],
+                )
+        except Exception:
+            pass
         return
 
+    close_old_connections()
     from dashboard.models import ScanJob, ScanLog, Team
 
     job = ScanJob.objects.get(pk=job_pk)
@@ -2016,13 +2667,15 @@ def _run_custom_team_background(job_pk: int, team_pk: int, run_variables: dict):
         # Build callbacks
         agent_roles = list(team.agents.order_by("order").values_list("role", flat=True))
         task_index = [0]
+        task_lock = threading.Lock()
 
         def step_cb(step_output):
             try:
                 tool = getattr(step_output, "tool", "")
                 thought = getattr(step_output, "thought", "") or getattr(step_output, "log", "")
                 output = getattr(step_output, "output", "")
-                idx = min(task_index[0], len(agent_roles) - 1)
+                with task_lock:
+                    idx = min(task_index[0], len(agent_roles) - 1)
                 agent_name = agent_roles[idx] if agent_roles else ""
 
                 if tool:
@@ -2036,13 +2689,24 @@ def _run_custom_team_background(job_pk: int, team_pk: int, run_variables: dict):
 
         def task_cb(task_output):
             try:
-                idx = task_index[0]
+                with task_lock:
+                    idx = task_index[0]
+                    task_index[0] = idx + 1
+                    next_idx = task_index[0]
                 agent_name = agent_roles[idx] if idx < len(agent_roles) else "Agent"
-                summary = str(getattr(task_output, "raw", ""))[:300]
+                raw = str(getattr(task_output, "raw", ""))
+                summary = raw[:300]
                 log_callback("task_done", agent_name, f"Taak afgerond\n{summary}")
 
-                task_index[0] = idx + 1
-                next_idx = task_index[0]
+                # Store full task output for report display
+                TaskOutput.objects.create(
+                    job_id=job_pk,
+                    task_order=idx,
+                    agent_name=agent_name,
+                    task_description=str(getattr(task_output, "description", ""))[:500],
+                    output=raw,
+                )
+
                 if next_idx < len(agent_roles):
                     next_agent = agent_roles[next_idx]
                     log_callback("agent", next_agent, f"Agent {next_idx + 1}/{len(agent_roles)} gestart")
@@ -2072,24 +2736,60 @@ def _run_custom_team_background(job_pk: int, team_pk: int, run_variables: dict):
         import sys
         with _stdout_lock:
             original_stdout = sys.stdout
+            wrapper = None
             try:
-                sys.stdout = io.TextIOWrapper(
+                wrapper = io.TextIOWrapper(
                     sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True
                 )
+                sys.stdout = wrapper
             except AttributeError:
                 pass
 
             try:
                 result = crew.kickoff()
             finally:
+                if wrapper is not None:
+                    try:
+                        wrapper.detach()  # Prevent closing the underlying buffer
+                    except Exception:
+                        pass
                 sys.stdout = original_stdout
 
         raw_output = str(result.raw) if hasattr(result, "raw") else str(result)
+
+        # Extract token usage (was missing for custom teams)
+        total_tokens = 0
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(result, "token_usage"):
+            usage = result.token_usage
+            input_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            output_tokens = getattr(usage, "completion_tokens", 0) or 0
+            total_tokens = getattr(usage, "total_tokens", 0) or (input_tokens + output_tokens)
+
+        # Log API usage (always, even with 0 tokens)
+        first_agent = team.agents.order_by("order").first()
+        provider = first_agent.llm_provider if first_agent else "gemini"
+        model_name = first_agent.llm_model if first_agent else ""
+
+        try:
+            from dashboard.services.api_usage import log_llm_usage
+            log_llm_usage(
+                service=provider,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model_name=model_name,
+                job_pk=job_pk,
+                description=f"Custom team: {team.name}",
+            )
+        except Exception:
+            logger.warning("Could not log API usage for custom team", exc_info=True)
 
         job.status = "completed"
         job.progress_message = f"Team '{team.name}' afgerond"
         job.active_agent = ""
         job.tasks_completed = len(agent_roles)
+        job.token_count = total_tokens
         job.finished_at = timezone.now()
         job.save()
         log_callback("result", "System", f"Team run afgerond.\n{raw_output[:500]}")
@@ -2097,11 +2797,14 @@ def _run_custom_team_background(job_pk: int, team_pk: int, run_variables: dict):
     except Exception as e:
         logger.error("Team run failed (job=%s, team=%s)", job_pk, team_pk, exc_info=True)
         job.status = "failed"
-        job.error_message = f"{type(e).__name__}: {e}"
-        job.progress_message = f"Team run mislukt: {e}"
+        logger.exception("Job %s failed", job.pk)
+        job.error_message = "Er is een fout opgetreden. Controleer de logs voor details."
+        job.progress_message = "Team run mislukt"
         job.finished_at = timezone.now()
         job.save()
-        log_callback("error", "System", f"Team run mislukt: {e}")
+        log_callback("error", "System", f"Team run mislukt: {type(e).__name__}")
+    finally:
+        close_old_connections()
 
 
 # ---------------------------------------------------------------------------
@@ -2411,8 +3114,18 @@ def _run_compliance_section_background(job_pk: int, section_pk: int | None, sear
         django.setup()
     except Exception:
         logger.error("django.setup() failed in _run_compliance_section_background", exc_info=True)
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE dashboard_scanjob SET status='failed', error_message='Django setup failed' WHERE id=%s",
+                    [job_pk],
+                )
+        except Exception:
+            pass
         return
 
+    close_old_connections()
     from dashboard.models import ComplianceReport, ComplianceSection, ComplianceSectionVersion, ScanJob, ScanLog
 
     job = ScanJob.objects.get(pk=job_pk)
@@ -2491,14 +3204,17 @@ def _run_compliance_section_background(job_pk: int, section_pk: int | None, sear
     except Exception as e:
         logger.error("Compliance section check failed (job=%s)", job_pk, exc_info=True)
         job.status = "failed"
-        job.error_message = f"{type(e).__name__}: {e}"
-        job.progress_message = f"Check mislukt: {e}"
+        logger.exception("Job %s failed", job.pk)
+        job.error_message = "Er is een fout opgetreden. Controleer de logs voor details."
+        job.progress_message = "Check mislukt"
         job.finished_at = timezone.now()
         job.save()
         if section:
             section.status = "error"
             section.save(update_fields=["status"])
-        log_callback("error", "System", f"Check mislukt: {e}")
+        log_callback("error", "System", f"Check mislukt: {type(e).__name__}")
+    finally:
+        close_old_connections()
 
 
 def _summarize_with_llm(tool_result: str, section_title: str, current_body: str = "") -> str:
@@ -2510,7 +3226,7 @@ def _summarize_with_llm(tool_result: str, section_title: str, current_body: str 
         return f"Geen Gemini API key geconfigureerd.\n\nRuwe resultaten:\n{tool_result[:3000]}"
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-3-flash-preview")
 
     if current_body:
         prompt = (
@@ -2540,8 +3256,18 @@ def _run_compliance_investigation_background(job_pk: int, entity_name: str):
         django.setup()
     except Exception:
         logger.error("django.setup() failed in _run_compliance_investigation_background", exc_info=True)
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE dashboard_scanjob SET status='failed', error_message='Django setup failed' WHERE id=%s",
+                    [job_pk],
+                )
+        except Exception:
+            pass
         return
 
+    close_old_connections()
     from dashboard.models import ComplianceReport, ScanJob, ScanLog, Team
 
     job = ScanJob.objects.get(pk=job_pk)
@@ -2579,13 +3305,15 @@ def _run_compliance_investigation_background(job_pk: int, entity_name: str):
 
         agent_roles = list(team.agents.order_by("order").values_list("role", flat=True))
         task_index = [0]
+        task_lock = threading.Lock()
 
         def step_cb(step_output):
             try:
                 tool = getattr(step_output, "tool", "")
                 thought = getattr(step_output, "thought", "") or getattr(step_output, "log", "")
                 output = getattr(step_output, "output", "")
-                idx = min(task_index[0], len(agent_roles) - 1)
+                with task_lock:
+                    idx = min(task_index[0], len(agent_roles) - 1)
                 agent_name = agent_roles[idx] if agent_roles else ""
                 if tool:
                     log_callback("tool", agent_name, f"Tool: {tool}")
@@ -2598,12 +3326,13 @@ def _run_compliance_investigation_background(job_pk: int, entity_name: str):
 
         def task_cb(task_output):
             try:
-                idx = task_index[0]
+                with task_lock:
+                    idx = task_index[0]
+                    task_index[0] = idx + 1
+                    next_idx = task_index[0]
                 agent_name = agent_roles[idx] if idx < len(agent_roles) else "Agent"
                 summary = str(getattr(task_output, "raw", ""))[:300]
                 log_callback("task_done", agent_name, f"Taak afgerond\n{summary}")
-                task_index[0] = idx + 1
-                next_idx = task_index[0]
                 if next_idx < len(agent_roles):
                     next_agent = agent_roles[next_idx]
                     log_callback("agent", next_agent, f"Agent {next_idx + 1}/{len(agent_roles)} gestart")
@@ -2664,11 +3393,14 @@ def _run_compliance_investigation_background(job_pk: int, entity_name: str):
     except Exception as e:
         logger.error("Compliance investigation failed (job=%s)", job_pk, exc_info=True)
         job.status = "failed"
-        job.error_message = f"{type(e).__name__}: {e}"
-        job.progress_message = f"Onderzoek mislukt: {e}"
+        logger.exception("Job %s failed", job.pk)
+        job.error_message = "Er is een fout opgetreden. Controleer de logs voor details."
+        job.progress_message = "Onderzoek mislukt"
         job.finished_at = timezone.now()
         job.save()
-        log_callback("error", "System", f"Onderzoek mislukt: {e}")
+        log_callback("error", "System", f"Onderzoek mislukt: {type(e).__name__}")
+    finally:
+        close_old_connections()
 
 
 # ---------------------------------------------------------------------------
@@ -2724,12 +3456,397 @@ def track_open(request, token):
 @csrf_exempt
 def track_click(request, token):
     """Record a click event and redirect to the original URL."""
+    from urllib.parse import urlparse
     url = request.GET.get("url", "")
-    # Only allow http/https URLs
-    if url and url.startswith(("http://", "https://")):
-        redirect_url = url
-    else:
-        redirect_url = "/"
+    redirect_url = "/"
+    tracking_base = getattr(settings, "TRACKING_BASE_URL", "")
+    # Only allow redirects when TRACKING_BASE_URL is explicitly configured
+    if url and url.startswith(("http://", "https://")) and tracking_base:
+        allowed_host = urlparse(tracking_base).hostname
+        url_host = urlparse(url).hostname
+        if (
+            allowed_host
+            and url_host
+            and url_host.removeprefix("www.") == allowed_host.removeprefix("www.")
+        ):
+            redirect_url = url
     if ProspectResponse.objects.filter(tracking_token=token).exists():
         TrackingEvent.objects.create(token=token, event_type="click", url=redirect_url)
     return redirect(redirect_url)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# VACANCY SCRAPING (within Sales module)
+# ═══════════════════════════════════════════════════════════════════
+
+def vacancy_search(request):
+    """Vacancy search page — scrape job postings to find prospect companies."""
+    groups = _user_groups(request)
+    # Check which API sources are configured
+    sources_status = {
+        "jooble": bool(getattr(settings, "JOOBLE_API_KEY", "")),
+        "adzuna": bool(
+            getattr(settings, "ADZUNA_APP_ID", "")
+            and getattr(settings, "ADZUNA_APP_KEY", "")
+        ),
+        "careerjet": bool(getattr(settings, "CAREERJET_AFFID", "")),
+    }
+    return render(request, "dashboard/sales/vacancy_search.html", {
+        "groups": groups,
+        "sources_status": sources_status,
+        "categories": VacancyMonitorService.CATEGORIES,
+        "locations": VacancyMonitorService.NOORD_NEDERLAND_LOCATIONS,
+    })
+
+
+def htmx_vacancy_results(request):
+    """HTMX partial: search vacancies and return results grouped by company."""
+    query = request.GET.get("query", "").strip()
+    location = request.GET.get("location", "").strip()
+    sources = request.GET.getlist("sources") or ["jooble", "adzuna", "careerjet"]
+    group_slug = request.GET.get("group_slug", "").strip()
+
+    if not query:
+        return render(request, "dashboard/sales/_vacancy_results.html", {
+            "error": "Voer een zoekterm in.",
+        })
+
+    service = VacancyMonitorService()
+    vacancies = service.search_all(query, location=location, sources=sources)
+
+    # Store vacancies in DB (dedup on external_id)
+    stored_count = 0
+    for v in vacancies:
+        _, created = Vacancy.objects.get_or_create(
+            external_id=v["external_id"],
+            defaults={
+                "title": v["title"][:500],
+                "company_name": v["company_name"][:300],
+                "location": v.get("location", "")[:300],
+                "category": v.get("category", ""),
+                "description": v.get("description", ""),
+                "salary": v.get("salary", "")[:200],
+                "source_url": v.get("source_url", "")[:500],
+                "source": v["source"],
+                "published_date": v.get("published_date"),
+                "relevance_score": v.get("relevance_score", 0),
+            },
+        )
+        if created:
+            stored_count += 1
+
+    # Group by company
+    companies = service.extract_companies(vacancies)
+
+    # Check dedup: mark companies that already exist as prospects
+    new_company_count = 0
+    for company in companies:
+        match = find_existing_prospect(company["name"])
+        company["existing_prospect"] = match
+        company["already_saved"] = match is not None
+        if not match:
+            new_company_count += 1
+
+    # Log search for structural tracking
+    avg_rel = 0
+    if vacancies:
+        avg_rel = round(sum(v.get("relevance_score", 0) for v in vacancies) / len(vacancies))
+    VacancySearch.objects.create(
+        query=query,
+        location=location,
+        sources_used=", ".join(sources),
+        results_count=len(vacancies),
+        companies_found=len(companies),
+        new_companies=new_company_count,
+        avg_relevance=avg_rel,
+    )
+
+    # Category labels for display
+    cat_labels = {k: v["label"] for k, v in VacancyMonitorService.CATEGORIES.items()}
+
+    return render(request, "dashboard/sales/_vacancy_results.html", {
+        "companies": companies,
+        "total_vacancies": len(vacancies),
+        "total_companies": len(companies),
+        "new_stored": stored_count,
+        "cat_labels": cat_labels,
+        "group_slug": group_slug,
+        "sources_used": ", ".join(s.capitalize() for s in sources),
+    })
+
+
+@require_POST
+def htmx_vacancy_save_company(request):
+    """Save a single company from vacancy results as a prospect."""
+    company_name = request.POST.get("company_name", "").strip()
+    location = request.POST.get("location", "").strip()
+    group_slug = request.POST.get("group_slug", "").strip()
+
+    if not company_name:
+        return HttpResponse(
+            '<span class="text-xs text-red-500">Naam ontbreekt</span>'
+        )
+
+    # Check dedup
+    prospect = find_existing_prospect(company_name)
+
+    if not prospect:
+        # Try Google Places for enrichment
+        enriched = {}
+        try:
+            places_service = GooglePlacesService()
+            search_query = f"{company_name} {location}".strip()
+            results = places_service.text_search(search_query, max_results=1)
+            if results:
+                enriched = results[0]
+        except Exception:
+            logger.debug("Google Places lookup failed for %s", company_name)
+
+        # Create prospect
+        prospect = Prospect(
+            place_id=enriched.get("place_id", ""),
+            name=company_name,
+            address=enriched.get("address", ""),
+            phone=enriched.get("phone", ""),
+            website=enriched.get("website", ""),
+            business_type=enriched.get("business_type", ""),
+        )
+        if enriched.get("rating"):
+            try:
+                prospect.google_rating = float(enriched["rating"])
+            except (ValueError, TypeError):
+                pass
+        prospect.google_reviews_count = _safe_int(enriched.get("reviews_count"), 0)
+        if enriched.get("latitude"):
+            try:
+                prospect.latitude = float(enriched["latitude"])
+            except (ValueError, TypeError):
+                pass
+        if enriched.get("longitude"):
+            try:
+                prospect.longitude = float(enriched["longitude"])
+            except (ValueError, TypeError):
+                pass
+        prospect.save()
+
+        # Auto-scrape contact info
+        if prospect.website and not prospect.email:
+            try:
+                info = scrape_contact_info(prospect.website)
+                update_fields = []
+                if info.email:
+                    prospect.email = info.email
+                    update_fields.append("email")
+                if info.contact_first_name and not prospect.contact_first_name:
+                    prospect.contact_first_name = info.contact_first_name
+                    update_fields.append("contact_first_name")
+                if info.contact_last_name and not prospect.contact_last_name:
+                    prospect.contact_last_name = info.contact_last_name
+                    update_fields.append("contact_last_name")
+                if not prospect.aanhef:
+                    prospect.aanhef = "Geachte heer/mevrouw"
+                    update_fields.append("aanhef")
+                if update_fields:
+                    prospect.save(update_fields=update_fields)
+            except Exception:
+                logger.exception("Contact scrape failed for %s", prospect.website)
+
+    # Add to group
+    if group_slug:
+        group = _user_groups(request).filter(slug=group_slug).first()
+        if group:
+            prospect.groups.add(group)
+
+    # Link vacancies to this prospect
+    Vacancy.objects.filter(
+        company_name__iexact=company_name, prospect__isnull=True
+    ).update(prospect=prospect)
+
+    # Return saved badge
+    extra_info = ""
+    if prospect.email:
+        extra_info += (
+            f' <span class="text-gray-400">\u00b7</span> '
+            f'<span class="text-indigo-600">{html_escape(prospect.email)}</span>'
+        )
+    if prospect.contact_first_name or prospect.contact_last_name:
+        cname = f"{prospect.contact_first_name} {prospect.contact_last_name}".strip()
+        extra_info += (
+            f' <span class="text-gray-400">\u00b7</span> '
+            f'<span class="text-gray-600">{html_escape(cname)}</span>'
+        )
+    return HttpResponse(
+        f'<span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">'
+        f'<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
+        f'<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>'
+        f'</svg> Opgeslagen{extra_info}</span>'
+    )
+
+
+@require_POST
+def htmx_vacancy_save_all(request):
+    """Bulk save all companies from vacancy results as prospects."""
+    company_names_json = request.POST.get("company_names", "[]")
+    locations_json = request.POST.get("locations", "{}")
+    group_slug = request.POST.get("group_slug", "").strip()
+
+    try:
+        company_names = json.loads(company_names_json)
+        locations_map = json.loads(locations_json)
+    except (json.JSONDecodeError, TypeError):
+        return _toast_response(HttpResponse(""), "error", "Ongeldige data.")
+
+    if not isinstance(company_names, list):
+        return _toast_response(HttpResponse(""), "error", "Ongeldige data.")
+
+    group = _user_groups(request).filter(slug=group_slug).first() if group_slug else None
+    saved_count = 0
+    skipped_count = 0
+
+    for name in company_names:
+        name = name.strip()
+        if not name:
+            continue
+
+        # Check dedup
+        prospect = find_existing_prospect(name)
+        if prospect:
+            # Still add to group if not already there
+            if group and not prospect.groups.filter(pk=group.pk).exists():
+                prospect.groups.add(group)
+            skipped_count += 1
+            continue
+
+        location = locations_map.get(name, "")
+
+        # Try Google Places enrichment
+        enriched = {}
+        try:
+            places_service = GooglePlacesService()
+            search_query = f"{name} {location}".strip()
+            results = places_service.text_search(search_query, max_results=1)
+            if results:
+                enriched = results[0]
+        except Exception:
+            logger.debug("Google Places lookup failed for %s", name)
+
+        prospect = Prospect(
+            place_id=enriched.get("place_id", ""),
+            name=name,
+            address=enriched.get("address", ""),
+            phone=enriched.get("phone", ""),
+            website=enriched.get("website", ""),
+            business_type=enriched.get("business_type", ""),
+        )
+        if enriched.get("rating"):
+            try:
+                prospect.google_rating = float(enriched["rating"])
+            except (ValueError, TypeError):
+                pass
+        prospect.google_reviews_count = _safe_int(enriched.get("reviews_count"), 0)
+        prospect.save()
+
+        # Auto-scrape contact info
+        if prospect.website and not prospect.email:
+            try:
+                info = scrape_contact_info(prospect.website)
+                update_fields = []
+                if info.email:
+                    prospect.email = info.email
+                    update_fields.append("email")
+                if info.contact_first_name:
+                    prospect.contact_first_name = info.contact_first_name
+                    update_fields.append("contact_first_name")
+                if info.contact_last_name:
+                    prospect.contact_last_name = info.contact_last_name
+                    update_fields.append("contact_last_name")
+                if not prospect.aanhef:
+                    prospect.aanhef = "Geachte heer/mevrouw"
+                    update_fields.append("aanhef")
+                if update_fields:
+                    prospect.save(update_fields=update_fields)
+            except Exception:
+                logger.exception("Contact scrape failed for %s", prospect.website)
+
+        if group:
+            prospect.groups.add(group)
+
+        # Link vacancies
+        Vacancy.objects.filter(
+            company_name__iexact=name, prospect__isnull=True
+        ).update(prospect=prospect)
+
+        saved_count += 1
+
+    msg = f"{saved_count} bedrijven opgeslagen als prospects"
+    if skipped_count:
+        msg += f" ({skipped_count} al bestaand)"
+    return _toast_response(HttpResponse(""), "success", msg)
+
+
+def vacancy_analysis(request):
+    """Vacancy analysis dashboard — trends, top companies, search history."""
+    from datetime import timedelta
+
+    now = timezone.now()
+    week_ago = now - timedelta(days=7)
+
+    # KPIs
+    total_vacancies = Vacancy.objects.count()
+    total_companies = Vacancy.objects.values("company_name").distinct().count()
+    new_this_week = Vacancy.objects.filter(created_at__gte=week_ago).count()
+    avg_relevance = Vacancy.objects.aggregate(
+        avg=db_models.Avg("relevance_score")
+    )["avg"] or 0
+    high_relevance = Vacancy.objects.filter(relevance_score__gte=50).count()
+
+    # Top companies by relevance (from DB)
+    top_companies = (
+        Vacancy.objects.values("company_name")
+        .annotate(
+            vacancy_count=Count("id"),
+            max_relevance=db_models.Max("relevance_score"),
+            avg_relevance=db_models.Avg("relevance_score"),
+        )
+        .filter(vacancy_count__gte=1)
+        .order_by("-max_relevance", "-vacancy_count")[:20]
+    )
+
+    # Check which are already prospects
+    for c in top_companies:
+        match = find_existing_prospect(c["company_name"])
+        c["is_prospect"] = match is not None
+        c["prospect"] = match
+
+    # Category distribution
+    categories = (
+        Vacancy.objects.exclude(category="")
+        .values("category")
+        .annotate(count=Count("id"))
+        .order_by("-count")
+    )
+    cat_labels = {k: v["label"] for k, v in VacancyMonitorService.CATEGORIES.items()}
+
+    # Relevance distribution
+    relevance_ranges = {
+        "0-25": Vacancy.objects.filter(relevance_score__lt=25).count(),
+        "25-50": Vacancy.objects.filter(relevance_score__gte=25, relevance_score__lt=50).count(),
+        "50-75": Vacancy.objects.filter(relevance_score__gte=50, relevance_score__lt=75).count(),
+        "75-100": Vacancy.objects.filter(relevance_score__gte=75).count(),
+    }
+
+    # Search history
+    recent_searches = VacancySearch.objects.all()[:10]
+
+    return render(request, "dashboard/sales/vacancy_analysis.html", {
+        "total_vacancies": total_vacancies,
+        "total_companies": total_companies,
+        "new_this_week": new_this_week,
+        "avg_relevance": round(avg_relevance),
+        "high_relevance": high_relevance,
+        "top_companies": top_companies,
+        "categories": categories,
+        "cat_labels": cat_labels,
+        "relevance_ranges": relevance_ranges,
+        "recent_searches": recent_searches,
+    })

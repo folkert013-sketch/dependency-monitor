@@ -1,0 +1,164 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Vacature-analyse{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <div class="flex items-center gap-3">
+        <a href="{% url 'dashboard:sales_home' %}" class="text-sm text-gray-500 hover:text-indigo-600 transition-colors">&larr; Sales</a>
+        <span class="text-gray-300">/</span>
+        <a href="{% url 'dashboard:vacancy_search' %}" class="text-sm text-gray-500 hover:text-teal-600 transition-colors">Vacatures zoeken</a>
+    </div>
+    <h1 class="text-3xl font-bold text-gray-900 mt-2">Vacature-analyse</h1>
+    <p class="text-gray-500 mt-1">Overzicht van gescrapete vacatures en relevantie voor jouw profiel</p>
+</div>
+
+<!-- KPI's -->
+<div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <p class="text-sm text-gray-500">Totaal vacatures</p>
+        <p class="text-3xl font-bold text-gray-900 mt-1">{{ total_vacancies }}</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <p class="text-sm text-gray-500">Unieke bedrijven</p>
+        <p class="text-3xl font-bold text-teal-600 mt-1">{{ total_companies }}</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <p class="text-sm text-gray-500">Nieuw deze week</p>
+        <p class="text-3xl font-bold text-indigo-600 mt-1">{{ new_this_week }}</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <p class="text-sm text-gray-500">Gem. relevantie</p>
+        <p class="text-3xl font-bold {% if avg_relevance >= 50 %}text-emerald-600{% elif avg_relevance >= 25 %}text-amber-600{% else %}text-gray-600{% endif %} mt-1">{{ avg_relevance }}%</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <p class="text-sm text-gray-500">Hoge match (50%+)</p>
+        <p class="text-3xl font-bold text-emerald-600 mt-1">{{ high_relevance }}</p>
+    </div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-6 mb-8">
+    <!-- Relevantie verdeling -->
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <h2 class="text-sm font-semibold text-gray-900 mb-4">Relevantie-verdeling</h2>
+        <div class="space-y-3">
+            {% for range, count in relevance_ranges.items %}
+            <div>
+                <div class="flex justify-between text-xs text-gray-600 mb-1">
+                    <span>{{ range }}%</span>
+                    <span>{{ count }}</span>
+                </div>
+                <div class="w-full bg-gray-100 rounded-full h-2.5">
+                    {% widthratio count total_vacancies 100 as pct %}
+                    <div class="h-2.5 rounded-full {% if '75' in range %}bg-emerald-500{% elif '50' in range %}bg-amber-500{% elif '25' in range %}bg-blue-400{% else %}bg-gray-300{% endif %}"
+                         style="width: {% widthratio count total_vacancies 100 %}%"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Categorieën -->
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <h2 class="text-sm font-semibold text-gray-900 mb-4">Categorieën</h2>
+        {% if categories %}
+        <div class="space-y-3">
+            {% for cat in categories %}
+            <div class="flex items-center justify-between">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                    {% if cat.category == 'financieel' %}bg-purple-100 text-purple-700
+                    {% elif cat.category == 'data_analyse' %}bg-blue-100 text-blue-700
+                    {% elif cat.category == 'ict' %}bg-amber-100 text-amber-700
+                    {% elif cat.category == 'zzp_admin' %}bg-emerald-100 text-emerald-700
+                    {% elif cat.category == 'automatisering' %}bg-teal-100 text-teal-700
+                    {% else %}bg-gray-100 text-gray-600{% endif %}">
+                    {% for key, label in cat_labels.items %}{% if key == cat.category %}{{ label }}{% endif %}{% endfor %}
+                </span>
+                <span class="text-sm font-semibold text-gray-700">{{ cat.count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400">Nog geen data</p>
+        {% endif %}
+    </div>
+
+    <!-- Zoekgeschiedenis -->
+    <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+        <h2 class="text-sm font-semibold text-gray-900 mb-4">Recente zoekopdrachten</h2>
+        {% if recent_searches %}
+        <div class="space-y-2">
+            {% for s in recent_searches %}
+            <div class="flex items-center justify-between text-sm border-b border-gray-100 pb-2">
+                <div class="min-w-0">
+                    <p class="text-gray-700 truncate">"{{ s.query }}" {% if s.location %}<span class="text-gray-400">in {{ s.location }}</span>{% endif %}</p>
+                    <p class="text-xs text-gray-400">{{ s.created_at|timesince }} geleden</p>
+                </div>
+                <div class="text-right flex-shrink-0 ml-2">
+                    <span class="text-xs font-medium text-gray-600">{{ s.results_count }} res.</span>
+                    {% if s.avg_relevance >= 50 %}
+                    <span class="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 ml-1">{{ s.avg_relevance }}%</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400">Nog geen zoekopdrachten</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Top bedrijven -->
+<div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-gray-900">Top bedrijven op relevantie</h2>
+        <a href="{% url 'dashboard:vacancy_search' %}" class="text-xs text-teal-600 hover:text-teal-800">Nieuwe zoekopdracht &rarr;</a>
+    </div>
+    {% if top_companies %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-xs text-gray-500 border-b border-gray-200">
+                    <th class="pb-2 font-medium">Bedrijf</th>
+                    <th class="pb-2 font-medium text-center">Vacatures</th>
+                    <th class="pb-2 font-medium text-center">Max score</th>
+                    <th class="pb-2 font-medium text-center">Gem. score</th>
+                    <th class="pb-2 font-medium text-center">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for c in top_companies %}
+                <tr class="hover:bg-gray-50">
+                    <td class="py-2.5 font-medium text-gray-900">{{ c.company_name }}</td>
+                    <td class="py-2.5 text-center text-gray-600">{{ c.vacancy_count }}</td>
+                    <td class="py-2.5 text-center">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                            {% if c.max_relevance >= 75 %}bg-emerald-100 text-emerald-700
+                            {% elif c.max_relevance >= 50 %}bg-amber-100 text-amber-700
+                            {% elif c.max_relevance >= 25 %}bg-blue-100 text-blue-700
+                            {% else %}bg-gray-100 text-gray-500{% endif %}">
+                            {{ c.max_relevance }}%
+                        </span>
+                    </td>
+                    <td class="py-2.5 text-center text-gray-500">{{ c.avg_relevance|floatformat:0 }}%</td>
+                    <td class="py-2.5 text-center">
+                        {% if c.is_prospect %}
+                        <span class="inline-flex items-center gap-1 text-xs text-emerald-600">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            Prospect
+                        </span>
+                        {% else %}
+                        <span class="text-xs text-gray-400">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-sm text-gray-400">Nog geen vacaturedata. <a href="{% url 'dashboard:vacancy_search' %}" class="text-teal-600 underline">Start een zoekopdracht</a>.</p>
+    {% endif %}
+</div>
+{% endblock %}

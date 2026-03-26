@@ -93,9 +93,11 @@ def _poll_token_usage(agents, job_pk, stop_event):
                 # CrewAI LLM wraps litellm; try common token tracking attributes
                 usage = getattr(llm, "_token_usage", None) or getattr(llm, "token_usage", None)
                 if usage:
-                    total += getattr(usage, "total_tokens", 0) or 0
-                    total += getattr(usage, "prompt_tokens", 0) or 0
-                    total += getattr(usage, "completion_tokens", 0) or 0
+                    total_tokens_val = getattr(usage, "total_tokens", 0) or 0
+                    if total_tokens_val:
+                        total += total_tokens_val
+                    else:
+                        total += (getattr(usage, "prompt_tokens", 0) or 0) + (getattr(usage, "completion_tokens", 0) or 0)
             if total > 0:
                 ScanJob.objects.filter(pk=job_pk).update(token_count=total)
         except Exception:
@@ -248,18 +250,34 @@ def run_crew(requirements_path: str | None = None, log_callback=None, job_pk: in
 
     # Extract token usage from CrewAI result
     total_tokens = 0
+    total_input = 0
+    total_output = 0
     estimated_cost = Decimal("0")
 
     if hasattr(result, "token_usage"):
         usage = result.token_usage
-        total_input = getattr(usage, "total_tokens", 0) or getattr(usage, "prompt_tokens", 0) or 0
+        total_input = getattr(usage, "prompt_tokens", 0) or 0
         total_output = getattr(usage, "completion_tokens", 0) or 0
-        total_tokens = total_input + total_output
+        total_tokens = getattr(usage, "total_tokens", 0) or (total_input + total_output)
         # Gemini 2.5 Pro pricing: $1.25/1M input, $10/1M output (>200k context)
         # Use lower tier: $1.25/1M input, $10/1M output
         input_cost = Decimal(str(total_input)) * Decimal("0.00000125")
         output_cost = Decimal(str(total_output)) * Decimal("0.00001")
         estimated_cost = (input_cost + output_cost).quantize(Decimal("0.0001"))
+
+    # Log to centralized API usage tracker
+    try:
+        from dashboard.services.api_usage import log_llm_usage
+        log_llm_usage(
+            service="gemini",
+            input_tokens=total_input,
+            output_tokens=total_output,
+            model_name="gemini-3.1-pro-preview",
+            job_pk=job_pk,
+            description="Dependency Monitor scan",
+        )
+    except Exception:
+        logger.warning("Could not log API usage", exc_info=True)
 
     raw_output = str(result.raw) if hasattr(result, "raw") else str(result)
 

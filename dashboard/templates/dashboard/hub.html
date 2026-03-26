@@ -49,6 +49,23 @@
     </div>
 </section>
 
+<!-- Accountancy -->
+<section class="mb-10">
+    <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>
+        Accountancy
+    </h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <a href="{% url 'samenstellen:home' %}" class="group block bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm hover:shadow-lg hover:border-teal-200 transition-all">
+            <div class="w-12 h-12 bg-teal-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-100 transition-colors">
+                <svg class="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 group-hover:text-teal-700 transition-colors">Samenstelopdracht</h3>
+            <p class="text-sm text-gray-500 mt-1">Voer een samenstelopdracht uit conform NV COS 4410 met AI-ondersteunde fasebeoordeling.</p>
+        </a>
+    </div>
+</section>
+
 <!-- CRM & Verkoop -->
 <section class="mb-10">
     <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
@@ -86,6 +103,13 @@
             </div>
             <h3 class="text-lg font-semibold text-gray-900 group-hover:text-violet-700 transition-colors">AI Teams</h3>
             <p class="text-sm text-gray-500 mt-1">Configureer en run dynamische AI-teams met agents, taken en tools.</p>
+        </a>
+        <a href="{% url 'dashboard:ai_config' %}" class="group block bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm hover:shadow-lg hover:border-violet-200 transition-all">
+            <div class="w-12 h-12 bg-violet-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-violet-100 transition-colors">
+                <svg class="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 group-hover:text-violet-700 transition-colors">AI Configuratie</h3>
+            <p class="text-sm text-gray-500 mt-1">Beheer AI-providers, modellen en beschikbare tools.</p>
         </a>
     </div>
 </section>

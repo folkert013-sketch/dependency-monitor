@@ -9,6 +9,7 @@ Django 6 + CrewAI + HTMX + Tailwind CSS + Tom Select.
 - `dashboard/` — Hoofd-app: models, views, urls, templates, admin
 - `monitor/` — Dependency monitoring crew + tools + YAML config
 - `fiscal/` — Fiscale monitoring crew + tools + YAML config
+- `samenstellen/` — Samenstelopdracht NV COS 4410 module (orchestrator met fase-team koppelingen)
 
 ## Belangrijke bestanden
 - `dashboard/models.py` — Alle models (Team, TeamAgent, TeamTask, TeamVariable, ScanJob, Report, Finding, BlogArticle)
@@ -36,6 +37,7 @@ Django 6 + CrewAI + HTMX + Tailwind CSS + Tom Select.
   - HTMX lifecycle: destroy voor swap (`htmx:beforeSwap`), re-init na swap (`htmx:afterSettle`)
   - Custom indigo theme in base.html `<style>` blok (`.ts-wrapper`, `.ts-dropdown`, etc.)
   - Nieuwe selects hoeven geen extra attributen — worden automatisch geïnitialiseerd
+  - **Geen `overflow-hidden` op containers met Tom Select** — de dropdown wordt anders afgeknipt. Gebruik `rounded-t-xl`/`rounded-b-xl` op child-elementen voor afgeronde hoeken i.p.v. overflow-hidden op de parent.
 - **Toast notificaties** — 3 entry points:
   - Django `messages` framework → automatisch gerenderd als toasts bij page load
   - `HX-Trigger: showToast` header → voor HTMX responses, via `_toast_response()` helper in views.py
@@ -56,4 +58,6 @@ Django 6 + CrewAI + HTMX + Tailwind CSS + Tom Select.
 - `ANTHROPIC_API_KEY` — Anthropic API key (optioneel)
 - `OPENAI_API_KEY` — OpenAI API key (optioneel)
 - `MONITORED_PROJECT_PATH` — Pad naar het te monitoren project
-- `SMTP_HOST/PORT/USER/PASSWORD` — E-mail configuratie
+- `MS_GRAPH_TENANT_ID/CLIENT_ID/CLIENT_SECRET/USER_ID` — Microsoft Graph e-mail API
+- `EMAIL_TO` — Fallback ontvanger voor systeem-emails
+- `TRACKING_BASE_URL` — Base URL voor e-mail tracking pixels

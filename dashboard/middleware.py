@@ -12,9 +12,7 @@ from django.shortcuts import redirect
 # Paths that do not require authentication
 LOGIN_EXEMPT_PREFIXES = (
     "/accounts/",
-    "/about/",
-    "/admin/",
-    "/t/",  # Email tracking endpoints (public)
+    "/t/",  # Email tracking endpoints (public, csrf_exempt)
 )
 
 

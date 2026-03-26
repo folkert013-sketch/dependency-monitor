@@ -2,39 +2,67 @@
 Dynamic crew builder — creates a CrewAI Crew from a Team database record.
 """
 
+import logging
 import os
 from pathlib import Path
 
 from crewai import Agent, Crew, Process, Task
 from crewai.llm import LLM
 
+from .constants import PROVIDER_CONFIG, SUGGESTED_MODELS
 from .tool_registry import TOOL_REGISTRY
 
-PROVIDER_CONFIG = {
-    "gemini": {"prefix": "gemini/", "env_key": "GEMINI_API_KEY"},
-    "anthropic": {"prefix": "anthropic/", "env_key": "ANTHROPIC_API_KEY"},
-    "openai": {"prefix": "openai/", "env_key": "OPENAI_API_KEY"},
-}
+logger = logging.getLogger(__name__)
 
-SUGGESTED_MODELS = {
-    "gemini": ["gemini-3-flash-preview", "gemini-3.1-pro-preview"],
-    "anthropic": ["claude-sonnet-4-6", "claude-haiku-4-5"],
-    "openai": ["gpt-4o", "gpt-4o-mini"],
-}
+
+def get_model_ids(provider):
+    """Return flat list of model IDs for a provider (backward compat)."""
+    return [m["id"] for m in SUGGESTED_MODELS.get(provider, [])]
 
 
 def _get_llm(provider: str, model_id: str) -> LLM:
     config = PROVIDER_CONFIG.get(provider, PROVIDER_CONFIG["gemini"])
+    api_key = os.environ.get(config["env_key"], "")
+    if not api_key:
+        raise ValueError(
+            f"API key ontbreekt: stel {config['env_key']} in als environment variabele"
+        )
     return LLM(
         model=f"{config['prefix']}{model_id}",
-        api_key=os.environ.get(config["env_key"], ""),
+        api_key=api_key,
     )
 
 
+_PROMPT_INJECTION_PATTERNS = [
+    "ignore all previous",
+    "ignore your instructions",
+    "disregard your",
+    "forget your instructions",
+    "new instructions:",
+    "system prompt:",
+    "you are now",
+    "act as if",
+]
+
+
+def _sanitize_variable(value: str) -> str:
+    """Strip known prompt injection patterns from user-supplied variable values."""
+    lower = value.lower()
+    for pattern in _PROMPT_INJECTION_PATTERNS:
+        if pattern in lower:
+            logger.warning("Prompt injection attempt detected in variable value: %s...", value[:50])
+            return "[GEBLOKKEERD — ongeldige invoer]"
+    # Limit variable length to prevent context stuffing
+    if len(value) > 5000:
+        return value[:5000]
+    return value
+
+
 def _interpolate(text: str, variables: dict) -> str:
-    """Replace {var_name} placeholders with actual values."""
+    """Replace {var_name} placeholders with sanitized values."""
     for key, value in variables.items():
-        text = text.replace(f"{{{key}}}", str(value))
+        sanitized = _sanitize_variable(str(value))
+        text = text.replace(f"{{{key}}}", sanitized)
     return text
 
 
@@ -80,7 +108,8 @@ def _instantiate_tool(tool_id: str, run_variables: dict):
     # Default: no-arg instantiation
     try:
         return cls()
-    except TypeError:
+    except TypeError as e:
+        logger.warning("Tool '%s' kon niet worden geïnstantieerd: %s", tool_id, e)
         return None
 
 
@@ -100,6 +129,16 @@ def build_crew_from_team(team, run_variables: dict, step_callback=None, task_cal
     db_agents = list(team.agents.all().order_by("order"))
     db_tasks = list(team.tasks.all().order_by("order"))
 
+    # --- Build select-opties tools mapping ---
+    # Voor select-variabelen met tools in de opties: bouw een mapping
+    # zodat agent tools met {var_naam} automatisch vervangen worden.
+    select_tools_map = {}  # {var_name: [tool_ids]}
+    for db_var in team.variables.filter(input_type="select"):
+        selected_value = run_variables.get(db_var.name, db_var.default_value)
+        for option in (db_var.options or []):
+            if option.get("value") == selected_value and "tools" in option:
+                select_tools_map[db_var.name] = option["tools"]
+
     # --- Build agents ---
     agent_map = {}  # db_agent.pk -> CrewAI Agent
     agents_list = []
@@ -108,10 +147,31 @@ def build_crew_from_team(team, run_variables: dict, step_callback=None, task_cal
         llm = _get_llm(db_agent.llm_provider, db_agent.llm_model)
 
         tool_instances = []
-        for tool_id in (db_agent.tools or []):
-            tool = _instantiate_tool(tool_id, run_variables)
-            if tool:
-                tool_instances.append(tool)
+        expanded_vars = set()  # Track welke select-vars al expanded zijn
+        for raw_tool_id in (db_agent.tools or []):
+            # Check of dit tool-ID een select-variabele met tools bevat
+            matched_var = None
+            for var_name, mapped_tools in select_tools_map.items():
+                if f"{{{var_name}}}" in raw_tool_id:
+                    matched_var = var_name
+                    break
+
+            if matched_var and matched_var not in expanded_vars:
+                # Eerste keer dat we deze var tegenkomen: laad alle mapped tools
+                expanded_vars.add(matched_var)
+                for mapped_id in select_tools_map[matched_var]:
+                    tool = _instantiate_tool(mapped_id, run_variables)
+                    if tool:
+                        tool_instances.append(tool)
+            elif matched_var:
+                # Deze var is al expanded, skip (voorkom duplicaten)
+                continue
+            else:
+                # Geen select-mapping: gewone interpolatie
+                tool_id = _interpolate(raw_tool_id, run_variables)
+                tool = _instantiate_tool(tool_id, run_variables)
+                if tool:
+                    tool_instances.append(tool)
 
         agent = Agent(
             role=db_agent.role,
@@ -160,6 +220,20 @@ def build_crew_from_team(team, run_variables: dict, step_callback=None, task_cal
         process=process,
         verbose=team.verbose,
     )
+
+    # For hierarchical process, pass the designated manager agent
+    # and exclude it from the workers list
+    if team.process == "hierarchical":
+        manager_db = next((a for a in db_agents if a.is_manager), None)
+        if manager_db:
+            manager_agent = agent_map.get(manager_db.pk)
+            if manager_agent:
+                # CrewAI requires the manager agent to have no tools
+                manager_agent.tools = []
+                crew_kwargs["manager_agent"] = manager_agent
+                agents_list = [a for a in agents_list if a is not manager_agent]
+                crew_kwargs["agents"] = agents_list
+
     if step_callback:
         crew_kwargs["step_callback"] = step_callback
     if task_callback:

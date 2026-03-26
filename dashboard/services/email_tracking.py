@@ -1,11 +1,12 @@
 import re
+from html import unescape
 from urllib.parse import quote
 
 
 def rewrite_links(html, tracking_token, base_url):
     """Rewrite href URLs to local tracking redirects."""
     def _replace_href(match):
-        url = match.group(1)
+        url = unescape(match.group(1))  # &amp; → &
         if url.startswith(("mailto:", "tel:", "#")):
             return match.group(0)
         tracked = f"{base_url}/t/c/{tracking_token}/?url={quote(url, safe='')}"

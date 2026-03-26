@@ -15,7 +15,7 @@
      hx-trigger="every 5s"
      hx-swap="innerHTML"
      hx-target="#legislation-search-results"
-     hx-vals='{"search_term": "{{ search_term }}"}'>
+     hx-vals='{"search_term": "{{ search_term|escapejs }}"}'>
 
     <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
         <div class="flex items-center gap-3">

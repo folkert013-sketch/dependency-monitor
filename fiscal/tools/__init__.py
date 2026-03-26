@@ -5,6 +5,11 @@ from .fiscal_news_aggregator import FiscalNewsAggregatorTool
 from .government_site_fetcher import GovernmentSiteFetcherTool
 from .tax_news_searcher import TaxNewsSearcherTool
 from .tax_rate_comparator import DutchTaxRateComparatorTool
+from .vpb_lookup_tool import VpbLookupTool
+from .vpb_boek_lookup_tool import VpbBoekLookupTool
+from .vpb_tarieven_tool import VpbTarievenTool
+from .ib_lookup_tool import IbLookupTool
+from .ib_tarieven_tool import IbTarievenTool
 
 __all__ = [
     "ArticleContentExtractorTool",
@@ -14,4 +19,9 @@ __all__ = [
     "GovernmentSiteFetcherTool",
     "TaxNewsSearcherTool",
     "DutchTaxRateComparatorTool",
+    "VpbLookupTool",
+    "VpbBoekLookupTool",
+    "VpbTarievenTool",
+    "IbLookupTool",
+    "IbTarievenTool",
 ]

@@ -1,0 +1,285 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Kaart{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900">Kaart</h1>
+        <p class="text-gray-500 mt-1">Prospects in Noord-Nederland</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <a href="{% url 'dashboard:sales_home' %}" class="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 shadow-sm transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg>
+            Overzicht
+        </a>
+    </div>
+</div>
+
+<div class="grid lg:grid-cols-4 gap-6">
+    <!-- Stats & filters panel -->
+    <div class="lg:col-span-1 space-y-4">
+        <!-- Filters -->
+        <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+            <h3 class="text-sm font-semibold text-gray-900 mb-3">Filters</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Groep</label>
+                    <select id="group-filter" onchange="applyFilters()">
+                        <option value="">Alle groepen</option>
+                        {% for group in groups %}
+                        <option value="{{ group.slug }}">{{ group.name }} ({{ group.prospect_count }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                    <select id="status-filter" onchange="applyFilters()">
+                        <option value="">Alle statussen</option>
+                        <option value="new">Nieuw</option>
+                        <option value="not_contacted">Niet benaderd</option>
+                        <option value="contacted">Benaderd</option>
+                        <option value="interested">Ge&iuml;nteresseerd</option>
+                        <option value="not_interested">Geen interesse</option>
+                        <option value="client">Klant</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm">
+            <h3 class="text-sm font-semibold text-gray-900 mb-3">Overzicht</h3>
+            <div class="flex items-baseline gap-2 mb-4">
+                <span id="visible-count" class="text-3xl font-bold text-gray-900">{{ total_on_map }}</span>
+                <span class="text-sm text-gray-500">prospects op kaart</span>
+            </div>
+            <div class="space-y-2">
+                <div class="flex items-center justify-between text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
+                        <span class="text-gray-600">Nieuw</span>
+                    </div>
+                    <span id="count-new" class="font-medium text-gray-900">0</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
+                        <span class="text-gray-600">Niet benaderd</span>
+                    </div>
+                    <span id="count-not_contacted" class="font-medium text-gray-900">0</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                        <span class="text-gray-600">Benaderd</span>
+                    </div>
+                    <span id="count-contacted" class="font-medium text-gray-900">0</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                        <span class="text-gray-600">Ge&iuml;nteresseerd</span>
+                    </div>
+                    <span id="count-interested" class="font-medium text-gray-900">0</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                        <span class="text-gray-600">Geen interesse</span>
+                    </div>
+                    <span id="count-not_interested" class="font-medium text-gray-900">0</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                        <span class="text-gray-600">Klant</span>
+                    </div>
+                    <span id="count-client" class="font-medium text-gray-900">0</span>
+                </div>
+            </div>
+            {% if no_coords_count %}
+            <div class="mt-4 pt-3 border-t border-gray-100">
+                <p class="text-xs text-amber-600">
+                    <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                    {{ no_coords_count }} prospect{{ no_coords_count|pluralize:"en" }} zonder co&ouml;rdinaten
+                </p>
+                <button hx-post="{% url 'dashboard:htmx_geocode_prospects' %}"
+                        hx-swap="none"
+                        hx-disabled-elt="this"
+                        hx-confirm="Wil je {{ no_coords_count }} prospect(en) geocoden via Google?"
+                        class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors disabled:opacity-50">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    Geocoden
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Map -->
+    <div class="lg:col-span-3">
+        <div class="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-1">
+            <div id="map" class="rounded-xl" style="height: 600px; z-index: 1;"></div>
+        </div>
+    </div>
+</div>
+
+{{ prospects_json|json_script:"prospects-data" }}
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+(function() {
+    var STATUS_COLORS = {
+        'new':            '#6b7280',
+        'not_contacted':  '#f97316',
+        'contacted':      '#3b82f6',
+        'interested':     '#10b981',
+        'not_interested': '#ef4444',
+        'client':         '#8b5cf6'
+    };
+
+    var STATUS_LABELS = {
+        'new':            'Nieuw',
+        'not_contacted':  'Niet benaderd',
+        'contacted':      'Benaderd',
+        'interested':     'Ge\u00efnteresseerd',
+        'not_interested': 'Geen interesse',
+        'client':         'Klant'
+    };
+
+    function createMarkerIcon(status) {
+        var color = STATUS_COLORS[status] || '#6b7280';
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">' +
+            '<path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.268 21.732 0 14 0z" fill="' + color + '"/>' +
+            '<circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>' +
+            '</svg>';
+        return L.divIcon({
+            html: svg,
+            className: '',
+            iconSize: [28, 36],
+            iconAnchor: [14, 36],
+            popupAnchor: [0, -36]
+        });
+    }
+
+    function buildPopupHtml(p) {
+        var statusColor = STATUS_COLORS[p.status] || '#6b7280';
+        var statusLabel = STATUS_LABELS[p.status] || p.status;
+        var groupNames = p.groups.map(function(g) { return g.name; }).join(', ');
+
+        var html = '<div style="min-width:220px;font-family:Inter,system-ui,sans-serif;">' +
+            '<div style="font-weight:700;font-size:15px;color:#111827;margin-bottom:4px;">' + escapeHtml(p.name) + '</div>';
+
+        if (p.address) {
+            html += '<div style="font-size:13px;color:#6b7280;margin-bottom:6px;">' + escapeHtml(p.address) + '</div>';
+        }
+
+        html += '<div style="margin-bottom:8px;">' +
+            '<span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;color:white;background:' + statusColor + ';">' + statusLabel + '</span>' +
+            '</div>';
+
+        if (p.phone) {
+            html += '<div style="font-size:13px;color:#374151;margin-bottom:3px;">Tel: ' + escapeHtml(p.phone) + '</div>';
+        }
+        if (p.email) {
+            html += '<div style="font-size:13px;color:#374151;margin-bottom:3px;">' + escapeHtml(p.email) + '</div>';
+        }
+        if (groupNames) {
+            html += '<div style="font-size:12px;color:#9ca3af;margin-bottom:8px;">' + escapeHtml(groupNames) + '</div>';
+        }
+
+        html += '<button hx-get="/dashboard/htmx/sales/prospect/' + p.slug + '/popup/" ' +
+            'hx-target="#modal-container" hx-swap="innerHTML" ' +
+            'style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;font-size:12px;font-weight:600;color:white;background:linear-gradient(to right,#4f46e5,#4338ca);border:none;border-radius:8px;cursor:pointer;">' +
+            'Details bekijken</button>';
+
+        html += '</div>';
+        return html;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
+
+    // Parse prospect data
+    var prospects = JSON.parse(document.getElementById('prospects-data').textContent);
+
+    // Init map centered on Noord-Nederland
+    var map = L.map('map').setView([53.1, 6.5], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 18
+    }).addTo(map);
+
+    // MarkerCluster layer
+    var clusterGroup = L.markerClusterGroup();
+    var allMarkers = [];
+
+    // Create markers
+    prospects.forEach(function(p) {
+        var marker = L.marker([p.lat, p.lng], { icon: createMarkerIcon(p.status) });
+        marker.bindPopup(buildPopupHtml(p));
+        marker.prospectData = p;
+        allMarkers.push(marker);
+        clusterGroup.addLayer(marker);
+    });
+    map.addLayer(clusterGroup);
+
+    // Activate HTMX in popups
+    map.on('popupopen', function(e) {
+        if (typeof htmx !== 'undefined') {
+            htmx.process(e.popup.getElement());
+        }
+    });
+
+    // Initial counts
+    updateCounts(prospects);
+
+    // Filter function (exposed globally for onchange handlers)
+    window.applyFilters = function() {
+        var groupEl = document.getElementById('group-filter');
+        var statusEl = document.getElementById('status-filter');
+        // Tom Select wraps the native select — get the underlying value
+        var groupSlug = groupEl.tomselect ? groupEl.tomselect.getValue() : groupEl.value;
+        var status = statusEl.tomselect ? statusEl.tomselect.getValue() : statusEl.value;
+
+        clusterGroup.clearLayers();
+        var visible = [];
+
+        allMarkers.forEach(function(m) {
+            var p = m.prospectData;
+            var matchGroup = !groupSlug || p.groups.some(function(g) { return g.slug === groupSlug; });
+            var matchStatus = !status || p.status === status;
+            if (matchGroup && matchStatus) {
+                clusterGroup.addLayer(m);
+                visible.push(p);
+            }
+        });
+
+        updateCounts(visible);
+    };
+
+    function updateCounts(visibleProspects) {
+        var counts = { 'new': 0, 'not_contacted': 0, 'contacted': 0, 'interested': 0, 'not_interested': 0, 'client': 0 };
+        visibleProspects.forEach(function(p) {
+            if (counts.hasOwnProperty(p.status)) counts[p.status]++;
+        });
+
+        document.getElementById('visible-count').textContent = visibleProspects.length;
+        Object.keys(counts).forEach(function(s) {
+            var el = document.getElementById('count-' + s);
+            if (el) el.textContent = counts[s];
+        });
+    }
+})();
+</script>
+{% endblock %}

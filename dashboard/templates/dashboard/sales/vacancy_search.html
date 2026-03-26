@@ -1,0 +1,200 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Vacatures zoeken{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <a href="{% url 'dashboard:sales_home' %}" class="text-sm text-gray-500 hover:text-indigo-600 transition-colors">&larr; Terug naar Sales</a>
+    <h1 class="text-3xl font-bold text-gray-900 mt-2">Vacatures zoeken</h1>
+    <p class="text-gray-500 mt-1">Zoek vacatures in Noord-Nederland en sla bedrijven op als prospects</p>
+</div>
+
+<div class="bg-white rounded-2xl border border-gray-200/60 p-6 shadow-sm mb-8">
+    <form hx-get="{% url 'dashboard:htmx_vacancy_results' %}"
+          hx-target="#vacancy-results"
+          hx-swap="innerHTML"
+          hx-indicator="#vacancy-spinner"
+          class="space-y-4">
+
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Zoekterm -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Zoekterm</label>
+                <input type="text" name="query" required
+                       placeholder="bijv. accountant, data analist, software developer"
+                       class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500">
+            </div>
+
+            <!-- Locatie -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Locatie / Plaats</label>
+                <input type="text" name="location"
+                       placeholder="bijv. Noord-Nederland, Groningen, Zuidlaren"
+                       class="w-full rounded-xl border-gray-300 text-sm px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500">
+                <p class="text-xs text-gray-400 mt-1">Tip: "Noord-Nederland" zoekt Groningen + Friesland + Drenthe</p>
+            </div>
+
+            <!-- Toevoegen aan groep -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Opslaan in groep</label>
+                <select name="group_slug">
+                    <option value="">— Kies een groep —</option>
+                    {% for group in groups %}
+                    <option value="{{ group.slug }}"
+                            {% if group.slug == "vacatures-financieel-administratie" or group.slug == "vacatures-data-analyse" or group.slug == "vacatures-ict-en-netwerken" %}
+                            style="font-weight: 600"
+                            {% endif %}>
+                        {{ group.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <!-- Bronnen -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Bronnen</label>
+            <div class="flex flex-wrap gap-3">
+                <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" name="sources" value="jooble" {% if sources_status.jooble %}checked{% endif %}
+                           class="rounded border-gray-300 text-teal-600 focus:ring-teal-500">
+                    <span>Jooble</span>
+                    {% if sources_status.jooble %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700">actief</span>
+                    {% else %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">key nodig</span>
+                    {% endif %}
+                </label>
+                <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" name="sources" value="adzuna" {% if sources_status.adzuna %}checked{% endif %}
+                           class="rounded border-gray-300 text-teal-600 focus:ring-teal-500">
+                    <span>Adzuna</span>
+                    {% if sources_status.adzuna %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700">actief</span>
+                    {% else %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">key nodig</span>
+                    {% endif %}
+                </label>
+                <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" name="sources" value="careerjet" {% if sources_status.careerjet %}checked{% endif %}
+                           class="rounded border-gray-300 text-teal-600 focus:ring-teal-500">
+                    <span>CareerJet</span>
+                    {% if sources_status.careerjet %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700">actief</span>
+                    {% else %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">ID nodig</span>
+                    {% endif %}
+                </label>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+            <button type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-600 to-teal-700 text-white text-sm font-semibold rounded-xl hover:from-teal-700 hover:to-teal-800 transition-all shadow-lg shadow-teal-200">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                Vacatures zoeken
+            </button>
+            <span id="vacancy-spinner" class="htmx-indicator">
+                <svg class="animate-spin h-5 w-5 text-teal-600" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            </span>
+        </div>
+    </form>
+</div>
+
+<!-- Info box -->
+<div class="bg-teal-50 border border-teal-200/60 rounded-2xl p-4 mb-8">
+    <div class="flex gap-3">
+        <svg class="w-5 h-5 text-teal-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <div class="text-sm text-teal-800">
+            <p class="font-medium">Hoe werkt het?</p>
+            <p class="mt-1 text-teal-700">
+                Vacatures worden opgehaald via Jooble{% if sources_status.adzuna %}, Adzuna{% endif %}{% if sources_status.careerjet %} en CareerJet{% endif %}.
+                Bedrijven worden gegroepeerd zodat je ze kunt opslaan als prospects.
+                Bij het opslaan worden automatisch contactgegevens verzameld via Google Places en de bedrijfswebsite.
+            </p>
+            {% if not sources_status.jooble or not sources_status.adzuna or not sources_status.careerjet %}
+            <p class="mt-2 text-teal-700">
+                <strong>API keys toevoegen aan .env:</strong>
+            </p>
+            <ul class="mt-1 text-teal-700 space-y-1 text-xs">
+                {% if not sources_status.jooble %}
+                <li><code class="bg-teal-100 px-1 rounded">JOOBLE_API_KEY</code> — gratis: <a href="https://jooble.org/api/about" target="_blank" class="underline">jooble.org/api/about</a></li>
+                {% endif %}
+                {% if not sources_status.adzuna %}
+                <li><code class="bg-teal-100 px-1 rounded">ADZUNA_APP_ID</code> + <code class="bg-teal-100 px-1 rounded">ADZUNA_APP_KEY</code> — gratis: <a href="https://developer.adzuna.com/signup" target="_blank" class="underline">developer.adzuna.com</a></li>
+                {% endif %}
+                {% if not sources_status.careerjet %}
+                <li><code class="bg-teal-100 px-1 rounded">CAREERJET_AFFID</code> — gratis: <a href="https://www.careerjet.com/partners/api" target="_blank" class="underline">careerjet.com/partners/api</a></li>
+                {% endif %}
+            </ul>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Quick search buttons -->
+<div class="bg-white rounded-2xl border border-gray-200/60 p-4 shadow-sm mb-8">
+    <p class="text-sm font-medium text-gray-700 mb-3">Snelzoeken</p>
+    <div class="flex flex-wrap gap-2">
+        <button onclick="quickSearch('accountant', 'Noord-Nederland')"
+                class="px-3 py-1.5 bg-teal-50 text-teal-700 text-xs font-medium rounded-lg border border-teal-200 hover:bg-teal-100 transition-colors">
+            Accountant Noord-Nederland
+        </button>
+        <button onclick="quickSearch('interim accountant', 'Groningen')"
+                class="px-3 py-1.5 bg-teal-50 text-teal-700 text-xs font-medium rounded-lg border border-teal-200 hover:bg-teal-100 transition-colors">
+            Interim accountant Groningen
+        </button>
+        <button onclick="quickSearch('zzp boekhouder', 'Drenthe')"
+                class="px-3 py-1.5 bg-teal-50 text-teal-700 text-xs font-medium rounded-lg border border-teal-200 hover:bg-teal-100 transition-colors">
+            ZZP boekhouder Drenthe
+        </button>
+        <button onclick="quickSearch('freelance controller', 'Groningen')"
+                class="px-3 py-1.5 bg-teal-50 text-teal-700 text-xs font-medium rounded-lg border border-teal-200 hover:bg-teal-100 transition-colors">
+            Freelance controller Groningen
+        </button>
+        <button onclick="quickSearch('automatisering administratie', 'Groningen')"
+                class="px-3 py-1.5 bg-purple-50 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 hover:bg-purple-100 transition-colors">
+            Automatisering administratie
+        </button>
+        <button onclick="quickSearch('financieel administratie', 'Assen')"
+                class="px-3 py-1.5 bg-teal-50 text-teal-700 text-xs font-medium rounded-lg border border-teal-200 hover:bg-teal-100 transition-colors">
+            Financieel administratie Assen
+        </button>
+        <button onclick="quickSearch('exact twinfield implementatie', '')"
+                class="px-3 py-1.5 bg-purple-50 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 hover:bg-purple-100 transition-colors">
+            Exact/Twinfield implementatie
+        </button>
+        <button onclick="quickSearch('data analist', 'Groningen')"
+                class="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors">
+            Data analist Groningen
+        </button>
+    </div>
+</div>
+
+<div id="vacancy-results"></div>
+
+<script>
+function quickSearch(query, location) {
+    const form = document.querySelector('form');
+    // Set form values
+    form.querySelector('input[name="query"]').value = query;
+    form.querySelector('input[name="location"]').value = location || '';
+    // Collect checked sources
+    const sources = Array.from(form.querySelectorAll('input[name="sources"]:checked')).map(cb => cb.value);
+    const groupSlug = form.querySelector('select[name="group_slug"]')?.value || '';
+    // Build query params
+    const params = new URLSearchParams();
+    params.set('query', query);
+    if (location) params.set('location', location);
+    sources.forEach(s => params.append('sources', s));
+    if (groupSlug) params.set('group_slug', groupSlug);
+    // Fire HTMX request directly
+    htmx.ajax('GET', '{% url "dashboard:htmx_vacancy_results" %}?' + params.toString(), {
+        target: '#vacancy-results',
+        swap: 'innerHTML',
+        indicator: '#vacancy-spinner'
+    });
+}
+</script>
+{% endblock %}

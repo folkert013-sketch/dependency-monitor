@@ -1,10 +1,57 @@
 {% load report_filters %}
-<!-- ========== AGENTS ========== -->
+
+<style>
+/* Org-chart connector lines */
+.org-manager-line::after {
+    content: ''; position: absolute; bottom: -2rem; left: 50%;
+    transform: translateX(-50%); width: 2px; height: 2rem; background: #c7d2fe;
+}
+.org-worker-line::before {
+    content: ''; position: absolute; top: -2rem; left: 50%;
+    transform: translateX(-50%); width: 2px; height: 2rem; background: #c7d2fe;
+}
+@media (max-width: 640px) {
+    .org-manager-line::after, .org-worker-line::before, .org-hline { display: none !important; }
+}
+</style>
+<script>
+function positionOrgHline() {
+    var line = document.getElementById('org-hline');
+    if (!line) return;
+    var workers = line.parentElement.querySelectorAll('.org-worker-line');
+    if (workers.length < 2) { line.style.display = 'none'; return; }
+    var parent = line.parentElement.getBoundingClientRect();
+    var first = workers[0].getBoundingClientRect();
+    var last = workers[workers.length - 1].getBoundingClientRect();
+    var firstCenter = (first.left + first.right) / 2 - parent.left;
+    var lastCenter = (last.left + last.right) / 2 - parent.left;
+    line.style.left = firstCenter + 'px';
+    line.style.right = (parent.width - lastCenter) + 'px';
+}
+document.addEventListener('htmx:afterSettle', positionOrgHline);
+window.addEventListener('load', function() { setTimeout(positionOrgHline, 50); });
+
+function showPreviewModal(modalId) {
+    document.querySelectorAll('.preview-modal-backdrop').forEach(function(el) { el.classList.add('hidden'); });
+    var modal = document.getElementById(modalId);
+    if (modal) modal.classList.remove('hidden');
+}
+function closePreviewModal(el) {
+    el.closest('.preview-modal-backdrop').classList.add('hidden');
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.preview-modal-backdrop').forEach(function(el) { el.classList.add('hidden'); });
+    }
+});
+</script>
+
+<!-- ===== ORGANISATIESTRUCTUUR ===== -->
 <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6">
     <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <div>
-            <h2 class="text-lg font-semibold text-gray-900">Agents</h2>
-            <p class="text-xs text-gray-500 mt-0.5">{{ agents|length }} agent{{ agents|pluralize:"s" }} in dit team</p>
+            <h2 class="text-lg font-semibold text-gray-900">Organisatiestructuur</h2>
+            <p class="text-xs text-gray-500 mt-0.5">{{ agents|length }} agent{{ agents|pluralize:"s" }} &mdash; {% if manager %}{{ manager.role }} is hoofdagent{% else %}geen hoofdagent ingesteld{% endif %}</p>
         </div>
         <button onclick="document.getElementById('add-agent-form').classList.toggle('hidden')"
                 class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
@@ -13,7 +60,7 @@
         </button>
     </div>
 
-    <!-- Add agent form -->
+    <!-- Add agent form (hidden) -->
     <div id="add-agent-form" class="hidden border-b border-gray-100 bg-gray-50 p-5">
         <form hx-post="{% url 'dashboard:team_agent_add' team.slug %}" hx-target="#agents-tasks-area" hx-swap="outerHTML">
             {% csrf_token %}
@@ -26,8 +73,8 @@
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="block text-xs font-medium text-gray-600 mb-1">LLM Provider</label>
-                        <select name="llm_provider" onchange="switchModelList(this, 'new-agent-model')"
-                                class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <select name="llm_provider" id="provider-new" data-provider-select="new-agent-model"
+                                class="tomselect-skip w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                             {% for val, label in provider_choices %}
                             <option value="{{ val }}">{{ label }}</option>
                             {% endfor %}
@@ -35,14 +82,23 @@
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-gray-600 mb-1">Model</label>
-                        <input type="text" name="llm_model" id="new-agent-model" value="gemini-3-flash-preview" list="models-gemini"
-                               class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <select name="llm_model" id="new-agent-model"
+                                class="tomselect-skip w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            {% for pkey, models in suggested_models.items %}
+                            {% for m in models %}
+                            <option value="{{ m.id }}" data-provider="{{ pkey }}"
+                                    {% if pkey != 'gemini' %}hidden disabled{% endif %}>
+                                {{ m.label }}
+                            </option>
+                            {% endfor %}
+                            {% endfor %}
+                        </select>
                     </div>
                 </div>
             </div>
             <div class="grid sm:grid-cols-2 gap-3 mb-3">
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Goal</label>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Opdracht / Goal</label>
                     <textarea name="goal" rows="3" required placeholder="Wat moet deze agent bereiken?"
                               class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
                 </div>
@@ -55,19 +111,28 @@
             <div class="grid sm:grid-cols-2 gap-3 mb-3">
                 <div>
                     <label class="block text-xs font-medium text-gray-600 mb-1">Tools</label>
-                    <div class="flex flex-wrap gap-2 mt-1">
-                        {% for tid, tlabel in tool_choices %}
-                        <label class="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-md px-2 py-1 cursor-pointer hover:border-indigo-300">
-                            <input type="checkbox" name="tools" value="{{ tid }}" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5">
-                            {{ tlabel }}
-                        </label>
+                    <select name="tools" multiple placeholder="Selecteer tools..."
+                            class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        {% for cat_key, cat in tool_choices_grouped.items %}
+                        <optgroup label="{{ cat.label }}">
+                            {% for tool in cat.tools %}
+                            <option value="{{ tool.id }}">{{ tool.label }}</option>
+                            {% endfor %}
+                        </optgroup>
                         {% endfor %}
-                    </div>
+                    </select>
                 </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Max iteraties</label>
-                    <input type="number" name="max_iter" value="25" min="1" max="200"
-                           class="w-32 text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Max iteraties</label>
+                        <input type="number" name="max_iter" value="25" min="1" max="200"
+                               class="w-32 text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" name="is_manager" id="new-agent-manager"
+                               class="rounded border-gray-300 text-purple-600 focus:ring-purple-500 w-4 h-4">
+                        <label for="new-agent-manager" class="text-xs font-medium text-gray-600">Hoofdagent (manager)</label>
+                    </div>
                 </div>
             </div>
             <div class="flex justify-end">
@@ -78,129 +143,319 @@
         </form>
     </div>
 
-    <!-- Agent list -->
+    <!-- Org Chart -->
     {% if agents %}
-    <div class="divide-y divide-gray-100">
-        {% for agent in agents %}
-        <div class="p-5 group" id="agent-row-{{ agent.pk }}">
-            <div class="flex items-start gap-4">
-                <div class="flex-shrink-0 w-8 h-8 bg-indigo-100 text-indigo-700 rounded-lg flex items-center justify-center font-bold text-sm">
-                    {{ forloop.counter }}
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3 class="font-semibold text-gray-900">{{ agent.role }}</h3>
-                        <span class="px-2 py-0.5 rounded text-xs font-bold
-                            {% if agent.llm_provider == 'gemini' %}bg-blue-200 text-blue-900{% elif agent.llm_provider == 'anthropic' %}bg-orange-200 text-orange-900{% else %}bg-green-200 text-green-900{% endif %}">
-                            {{ agent.get_llm_provider_display }}
-                        </span>
-                        <span class="text-xs text-gray-400 font-mono">{{ agent.llm_model }}</span>
+    <div class="p-6 overflow-x-auto">
+        <div class="flex flex-col items-center min-w-fit">
+
+            {% if manager %}
+            <!-- ── Manager Card ── -->
+            <div class="relative org-manager-line mb-8">
+                <div class="w-72 p-5 bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-300 rounded-xl shadow-sm group relative">
+                    <!-- Badge -->
+                    <div class="flex items-center gap-2 mb-2">
+                        <svg class="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm0 2h14v2H5v-2z"/></svg>
+                        <span class="text-xs font-bold text-purple-700 uppercase tracking-wide">Hoofdagent</span>
                     </div>
-                    <p class="text-sm text-gray-600 mb-2 line-clamp-2">{{ agent.goal }}</p>
-                    {% if agent.tools %}
-                    <div class="flex flex-wrap gap-1.5">
-                        {% for tid in agent.tools %}
-                        <span class="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">{{ tid }}</span>
+                    <h3 class="font-semibold text-gray-900">{{ manager.role }}</h3>
+                    <div class="flex items-center gap-2 mt-1.5">
+                        <span class="px-2 py-0.5 rounded text-xs font-bold
+                            {% if manager.llm_provider == 'gemini' %}bg-blue-200 text-blue-900{% elif manager.llm_provider == 'anthropic' %}bg-orange-200 text-orange-900{% else %}bg-green-200 text-green-900{% endif %}">
+                            {{ manager.get_llm_provider_display }}
+                        </span>
+                        <span class="text-xs text-gray-400 font-mono">{{ manager.llm_model }}</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2 line-clamp-2">{{ manager.goal }}</p>
+                    {% if manager.tools %}
+                    <div class="flex flex-wrap gap-1 mt-2">
+                        {% for tid in manager.tools %}
+                        <span class="px-1.5 py-0.5 bg-white/80 text-gray-600 rounded text-xs" title="{{ tid }}">{{ tid|tool_label }}</span>
                         {% endfor %}
                     </div>
                     {% endif %}
-                </div>
-                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                    <button onclick="document.getElementById('edit-agent-{{ agent.pk }}').classList.toggle('hidden')"
-                            class="p-1.5 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-gray-100 transition-colors" title="Bewerken">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                    </button>
-                    <button hx-post="{% url 'dashboard:team_agent_delete' team.slug agent.pk %}" hx-target="#agents-tasks-area" hx-swap="outerHTML"
-                            hx-confirm="Agent '{{ agent.role }}' verwijderen?"
-                            class="p-1.5 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-100 transition-colors" title="Verwijderen">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Edit form (hidden) -->
-            <div id="edit-agent-{{ agent.pk }}" class="hidden mt-4 bg-gray-50 rounded-lg p-5">
-                <form hx-post="{% url 'dashboard:team_agent_edit' team.slug agent.pk %}" hx-target="#agents-tasks-area" hx-swap="outerHTML">
-                    {% csrf_token %}
-                    <div class="grid sm:grid-cols-2 gap-3 mb-3">
-                        <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">Rol</label>
-                            <input type="text" name="role" value="{{ agent.role }}" required class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">Provider</label>
-                                <select name="llm_provider" onchange="switchModelList(this, 'edit-model-{{ agent.pk }}')"
-                                        class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                                    {% for val, label in provider_choices %}
-                                    <option value="{{ val }}" {% if agent.llm_provider == val %}selected{% endif %}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">Model</label>
-                                <input type="text" name="llm_model" id="edit-model-{{ agent.pk }}" value="{{ agent.llm_model }}" list="models-{{ agent.llm_provider }}"
-                                       class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                            </div>
-                        </div>
+                    <!-- Hover actions -->
+                    <div class="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onclick="showPreviewModal('agent-preview-{{ manager.pk }}')"
+                                class="p-1.5 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-white/80 transition-colors" title="Snel bekijken">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        </button>
+                        <button onclick="document.getElementById('edit-agent-{{ manager.pk }}').classList.toggle('hidden')"
+                                class="p-1.5 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-white/80 transition-colors" title="Bewerken">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        </button>
+                        <button hx-post="{% url 'dashboard:team_agent_delete' team.slug manager.pk %}" hx-target="#agents-tasks-area" hx-swap="outerHTML"
+                                hx-confirm="Agent '{{ manager.role }}' verwijderen?"
+                                class="p-1.5 text-gray-400 hover:text-red-600 rounded-md hover:bg-white/80 transition-colors" title="Verwijderen">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
                     </div>
-                    <div class="grid sm:grid-cols-2 gap-3 mb-3">
-                        <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">Goal</label>
-                            <textarea name="goal" rows="3" required class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">{{ agent.goal }}</textarea>
+                </div>
+                <!-- Agent preview modal -->
+                <div id="agent-preview-{{ manager.pk }}" class="hidden preview-modal-backdrop fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onclick="if(event.target===this)closePreviewModal(this)">
+                    <div class="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto relative">
+                        <button onclick="closePreviewModal(this)" class="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                        <div class="flex items-center gap-2 mb-4">
+                            <svg class="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm0 2h14v2H5v-2z"/></svg>
+                            <h3 class="text-lg font-semibold text-gray-900">{{ manager.role }}</h3>
                         </div>
-                        <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">Backstory</label>
-                            <textarea name="backstory" rows="3" class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">{{ agent.backstory }}</textarea>
+                        <div class="mb-4">
+                            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Goal</span>
+                            <div class="text-sm text-gray-700 mt-1 prose prose-sm max-w-none">{{ manager.goal|render_markdown }}</div>
                         </div>
-                    </div>
-                    <div class="grid sm:grid-cols-2 gap-3 mb-3">
+                        {% if manager.backstory %}
+                        <div class="mb-4">
+                            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Backstory</span>
+                            <div class="text-sm text-gray-600 mt-1 prose prose-sm max-w-none">{{ manager.backstory|render_markdown }}</div>
+                        </div>
+                        {% endif %}
+                        {% if manager.tasks.all %}
                         <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">Tools</label>
-                            <div class="flex flex-wrap gap-2 mt-1">
-                                {% for tid, tlabel in tool_choices %}
-                                <label class="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-md px-2 py-1 cursor-pointer hover:border-indigo-300">
-                                    <input type="checkbox" name="tools" value="{{ tid }}" {% if tid in agent.tools %}checked{% endif %} class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5">
-                                    {{ tlabel }}
-                                </label>
+                            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Taken ({{ manager.tasks.count }})</span>
+                            <div class="mt-2 space-y-2">
+                                {% for task in manager.tasks.all %}
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <div class="text-sm text-gray-700 prose prose-sm max-w-none">{{ task.description|render_markdown }}</div>
+                                    {% if task.expected_output %}
+                                    <div class="text-sm text-gray-500 mt-2 pt-2 border-t border-gray-200">
+                                        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Verwacht resultaat</span>
+                                        <div class="prose prose-sm max-w-none mt-0.5">{{ task.expected_output|render_markdown }}</div>
+                                    </div>
+                                    {% endif %}
+                                </div>
                                 {% endfor %}
                             </div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">Max iteraties</label>
-                            <input type="number" name="max_iter" value="{{ agent.max_iter }}" min="1" max="200"
-                                   class="w-32 text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        {% else %}
+                        <p class="text-sm text-gray-400 italic">Geen taken toegewezen</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <!-- Edit form (hidden) -->
+                <div id="edit-agent-{{ manager.pk }}" class="hidden mt-4 w-full max-w-2xl bg-gray-50 rounded-lg p-5">
+                    {% include "dashboard/teams/_agent_edit_form.html" with agent=manager %}
+                </div>
+            </div>
+
+            <!-- ── Worker Cards with Horizontal Line ── -->
+            {% if workers %}
+            <div class="relative flex flex-col sm:flex-row justify-center gap-6 pt-8">
+                {% if workers|length > 1 %}
+                <div class="org-hline absolute top-0 h-0.5 bg-indigo-200 hidden sm:block" id="org-hline"></div>
+                {% endif %}
+                {% for worker in workers %}
+                <div class="relative org-worker-line">
+                    <div class="w-56 p-4 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 hover:shadow-md transition-all group relative">
+                        <h3 class="font-semibold text-gray-900 text-sm">{{ worker.role }}</h3>
+                        <div class="flex items-center gap-2 mt-1.5">
+                            <span class="px-2 py-0.5 rounded text-xs font-bold
+                                {% if worker.llm_provider == 'gemini' %}bg-blue-200 text-blue-900{% elif worker.llm_provider == 'anthropic' %}bg-orange-200 text-orange-900{% else %}bg-green-200 text-green-900{% endif %}">
+                                {{ worker.get_llm_provider_display }}
+                            </span>
+                            <span class="text-xs text-gray-400 font-mono truncate">{{ worker.llm_model }}</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2 line-clamp-2">{{ worker.goal }}</p>
+                        {% if worker.tools %}
+                        <div class="flex flex-wrap gap-1 mt-2">
+                            {% for tid in worker.tools %}
+                            <span class="px-1.5 py-0.5 bg-gray-50 text-gray-500 rounded text-xs" title="{{ tid }}">{{ tid|tool_label }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <!-- Hover actions -->
+                        <div class="absolute top-2 right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onclick="showPreviewModal('agent-preview-{{ worker.pk }}')"
+                                    class="p-1 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-gray-100 transition-colors" title="Snel bekijken">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                            </button>
+                            <button hx-post="{% url 'dashboard:team_agent_set_manager' team.slug worker.pk %}" hx-target="#agents-tasks-area" hx-swap="outerHTML"
+                                    class="p-1 text-gray-400 hover:text-purple-600 rounded-md hover:bg-gray-100 transition-colors" title="Maak hoofdagent">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm0 2h14v2H5v-2z"/></svg>
+                            </button>
+                            <button onclick="document.getElementById('edit-agent-{{ worker.pk }}').classList.toggle('hidden')"
+                                    class="p-1 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-gray-100 transition-colors" title="Bewerken">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                            </button>
+                            <button hx-post="{% url 'dashboard:team_agent_delete' team.slug worker.pk %}" hx-target="#agents-tasks-area" hx-swap="outerHTML"
+                                    hx-confirm="Agent '{{ worker.role }}' verwijderen?"
+                                    class="p-1 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-100 transition-colors" title="Verwijderen">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            </button>
                         </div>
                     </div>
-                    <div class="flex justify-end gap-2">
-                        <button type="button" onclick="document.getElementById('edit-agent-{{ agent.pk }}').classList.add('hidden')"
-                                class="px-3 py-1.5 text-gray-500 text-sm rounded-lg hover:bg-gray-200 transition-colors">Annuleren</button>
-                        <button type="submit" class="px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">Opslaan</button>
+                    <!-- Agent preview modal -->
+                    <div id="agent-preview-{{ worker.pk }}" class="hidden preview-modal-backdrop fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onclick="if(event.target===this)closePreviewModal(this)">
+                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto relative">
+                            <button onclick="closePreviewModal(this)" class="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                            <h3 class="text-lg font-semibold text-gray-900 mb-4">{{ worker.role }}</h3>
+                            <div class="mb-4">
+                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Goal</span>
+                                <div class="text-sm text-gray-700 mt-1 prose prose-sm max-w-none">{{ worker.goal|render_markdown }}</div>
+                            </div>
+                            {% if worker.backstory %}
+                            <div class="mb-4">
+                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Backstory</span>
+                                <div class="text-sm text-gray-600 mt-1 prose prose-sm max-w-none">{{ worker.backstory|render_markdown }}</div>
+                            </div>
+                            {% endif %}
+                            {% if worker.tasks.all %}
+                            <div>
+                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Taken ({{ worker.tasks.count }})</span>
+                                <div class="mt-2 space-y-2">
+                                    {% for task in worker.tasks.all %}
+                                    <div class="bg-gray-50 rounded-lg p-3">
+                                        <div class="text-sm text-gray-700 prose prose-sm max-w-none">{{ task.description|render_markdown }}</div>
+                                        {% if task.expected_output %}
+                                        <div class="text-sm text-gray-500 mt-2 pt-2 border-t border-gray-200">
+                                            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Verwacht resultaat</span>
+                                            <div class="prose prose-sm max-w-none mt-0.5">{{ task.expected_output|render_markdown }}</div>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% else %}
+                            <p class="text-sm text-gray-400 italic">Geen taken toegewezen</p>
+                            {% endif %}
+                        </div>
                     </div>
-                </form>
+                    <!-- Edit form (hidden) -->
+                    <div id="edit-agent-{{ worker.pk }}" class="hidden mt-3 w-full bg-gray-50 rounded-lg p-4">
+                        {% include "dashboard/teams/_agent_edit_form.html" with agent=worker %}
+                    </div>
+                </div>
+                {% endfor %}
             </div>
+            {% endif %}
+
+            {% else %}
+            <!-- No manager: show all agents as equal cards with "Maak hoofdagent" option -->
+            <div class="w-full">
+                <!-- Placeholder for manager slot -->
+                <div class="flex justify-center mb-6">
+                    <div class="w-72 p-5 border-2 border-dashed border-gray-300 rounded-xl text-center">
+                        <svg class="w-8 h-8 text-gray-300 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm0 2h14v2H5v-2z"/></svg>
+                        <p class="text-sm text-gray-400 font-medium">Geen hoofdagent</p>
+                        <p class="text-xs text-gray-400 mt-1">Klik op het kroon-icoon bij een agent om deze als hoofdagent in te stellen</p>
+                    </div>
+                </div>
+                <!-- All agents as grid -->
+                <div class="flex flex-wrap justify-center gap-6">
+                    {% for agent in agents %}
+                    <div class="relative">
+                        <div class="w-56 p-4 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 hover:shadow-md transition-all group relative">
+                            <h3 class="font-semibold text-gray-900 text-sm">{{ agent.role }}</h3>
+                            <div class="flex items-center gap-2 mt-1.5">
+                                <span class="px-2 py-0.5 rounded text-xs font-bold
+                                    {% if agent.llm_provider == 'gemini' %}bg-blue-200 text-blue-900{% elif agent.llm_provider == 'anthropic' %}bg-orange-200 text-orange-900{% else %}bg-green-200 text-green-900{% endif %}">
+                                    {{ agent.get_llm_provider_display }}
+                                </span>
+                                <span class="text-xs text-gray-400 font-mono truncate">{{ agent.llm_model }}</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2 line-clamp-2">{{ agent.goal }}</p>
+                            {% if agent.tools %}
+                            <div class="flex flex-wrap gap-1 mt-2">
+                                {% for tid in agent.tools %}
+                                <span class="px-1.5 py-0.5 bg-gray-50 text-gray-500 rounded text-xs" title="{{ tid }}">{{ tid|tool_label }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            <!-- Hover actions -->
+                            <div class="absolute top-2 right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onclick="showPreviewModal('agent-preview-{{ agent.pk }}')"
+                                        class="p-1 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-gray-100 transition-colors" title="Snel bekijken">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                </button>
+                                <button hx-post="{% url 'dashboard:team_agent_set_manager' team.slug agent.pk %}" hx-target="#agents-tasks-area" hx-swap="outerHTML"
+                                        class="p-1 text-gray-400 hover:text-purple-600 rounded-md hover:bg-gray-100 transition-colors" title="Maak hoofdagent">
+                                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm0 2h14v2H5v-2z"/></svg>
+                                </button>
+                                <button onclick="document.getElementById('edit-agent-{{ agent.pk }}').classList.toggle('hidden')"
+                                        class="p-1 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-gray-100 transition-colors" title="Bewerken">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                </button>
+                                <button hx-post="{% url 'dashboard:team_agent_delete' team.slug agent.pk %}" hx-target="#agents-tasks-area" hx-swap="outerHTML"
+                                        hx-confirm="Agent '{{ agent.role }}' verwijderen?"
+                                        class="p-1 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-100 transition-colors" title="Verwijderen">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Agent preview modal -->
+                        <div id="agent-preview-{{ agent.pk }}" class="hidden preview-modal-backdrop fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onclick="if(event.target===this)closePreviewModal(this)">
+                            <div class="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto relative">
+                                <button onclick="closePreviewModal(this)" class="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                </button>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">{{ agent.role }}</h3>
+                                <div class="mb-4">
+                                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Goal</span>
+                                    <div class="text-sm text-gray-700 mt-1 prose prose-sm max-w-none">{{ agent.goal|render_markdown }}</div>
+                                </div>
+                                {% if agent.backstory %}
+                                <div class="mb-4">
+                                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Backstory</span>
+                                    <div class="text-sm text-gray-600 mt-1 prose prose-sm max-w-none">{{ agent.backstory|render_markdown }}</div>
+                                </div>
+                                {% endif %}
+                                {% if agent.tasks.all %}
+                                <div>
+                                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Taken ({{ agent.tasks.count }})</span>
+                                    <div class="mt-2 space-y-2">
+                                        {% for task in agent.tasks.all %}
+                                        <div class="bg-gray-50 rounded-lg p-3">
+                                            <div class="text-sm text-gray-700 prose prose-sm max-w-none">{{ task.description|render_markdown }}</div>
+                                            {% if task.expected_output %}
+                                            <div class="text-sm text-gray-500 mt-2 pt-2 border-t border-gray-200">
+                                                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Verwacht resultaat</span>
+                                                <div class="prose prose-sm max-w-none mt-0.5">{{ task.expected_output|render_markdown }}</div>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% else %}
+                                <p class="text-sm text-gray-400 italic">Geen taken toegewezen</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <!-- Edit form (hidden) -->
+                        <div id="edit-agent-{{ agent.pk }}" class="hidden mt-3 w-full bg-gray-50 rounded-lg p-4">
+                            {% include "dashboard/teams/_agent_edit_form.html" with agent=agent %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
         </div>
-        {% endfor %}
     </div>
     {% else %}
-    <div class="px-6 py-8 text-center text-sm text-gray-400">
-        Nog geen agents. Voeg agents toe die taken gaan uitvoeren.
+    <div class="px-6 py-10 text-center">
+        <svg class="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <p class="text-sm text-gray-400">Nog geen agents. Voeg agents toe om je team op te bouwen.</p>
     </div>
     {% endif %}
 </div>
 
-<!-- ========== TASKS ========== -->
+<!-- ===== SECTIE 3: OPDRACHTEN (TAKEN) ===== -->
 <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <div>
-            <h2 class="text-lg font-semibold text-gray-900">Taken</h2>
-            <p class="text-xs text-gray-500 mt-0.5">{{ tasks|length }} ta{{ tasks|pluralize:"ak,ken" }} in dit team</p>
+            <h2 class="text-lg font-semibold text-gray-900">Opdrachten</h2>
+            <p class="text-xs text-gray-500 mt-0.5">{{ tasks|length }} opdracht{{ tasks|pluralize:"en" }} in dit team</p>
         </div>
         {% if agents %}
         <button onclick="document.getElementById('add-task-form').classList.toggle('hidden')"
                 class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-            Taak toevoegen
+            Opdracht toevoegen
         </button>
         {% endif %}
     </div>
@@ -213,11 +468,11 @@
             <div class="grid sm:grid-cols-2 gap-3 mb-3">
                 <div>
                     <label class="block text-xs font-medium text-gray-600 mb-1">Beschrijving</label>
-                    <textarea name="description" rows="4" required placeholder="Wat moet deze taak opleveren?"
+                    <textarea name="description" rows="4" required placeholder="Wat moet deze opdracht opleveren?"
                               class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Expected output</label>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Verwacht resultaat</label>
                     <textarea name="expected_output" rows="4" placeholder="Wat is het verwachte resultaat?"
                               class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
                 </div>
@@ -226,17 +481,19 @@
                 <div>
                     <label class="block text-xs font-medium text-gray-600 mb-1">Uitvoerende agent</label>
                     <select name="agent" required class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                        {% for a in agents %}<option value="{{ a.pk }}">{{ a.role }}</option>{% endfor %}
+                        {% for a in agents %}
+                        <option value="{{ a.pk }}">{{ a.role }}{% if a.is_manager %} (Hoofdagent){% endif %}</option>
+                        {% endfor %}
                     </select>
                 </div>
                 {% if tasks %}
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Context taken (resultaten beschikbaar)</label>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Context opdrachten (resultaten beschikbaar)</label>
                     <div class="flex flex-wrap gap-2 mt-1">
                         {% for t in tasks %}
                         <label class="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-md px-2 py-1 cursor-pointer hover:border-indigo-300">
                             <input type="checkbox" name="context_tasks" value="{{ t.pk }}" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5">
-                            Taak {{ forloop.counter }}
+                            Opdracht {{ forloop.counter }}
                         </label>
                         {% endfor %}
                     </div>
@@ -245,7 +502,7 @@
             </div>
             <div class="flex justify-end">
                 <button type="submit" class="px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
-                    Taak toevoegen
+                    Opdracht toevoegen
                 </button>
             </div>
         </form>
@@ -263,23 +520,60 @@
                 </div>
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 mb-1 flex-wrap">
-                        <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">{{ task.agent.role }}</span>
+                        <span class="px-2 py-0.5 rounded text-xs font-medium
+                            {% if task.agent.is_manager %}bg-purple-100 text-purple-700{% else %}bg-indigo-100 text-indigo-700{% endif %}">
+                            {% if task.agent.is_manager %}&#9733; {% endif %}{{ task.agent.role }}
+                        </span>
+                        <span class="px-2 py-0.5 rounded text-xs font-bold
+                            {% if task.agent.llm_provider == 'gemini' %}bg-blue-100 text-blue-800{% elif task.agent.llm_provider == 'anthropic' %}bg-orange-100 text-orange-800{% else %}bg-green-100 text-green-800{% endif %}">
+                            {{ task.agent.llm_model }}
+                        </span>
                         {% for ct in task.context_tasks.all %}
-                        <span class="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">ctx: Taak {{ ct.order|add:1 }}</span>
+                        <span class="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">ctx: Opdracht {{ ct.order|add:1 }}</span>
                         {% endfor %}
                     </div>
                     <p class="text-sm text-gray-600 line-clamp-2">{{ task.description }}</p>
                 </div>
-                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 relative">
+                    <button onclick="showPreviewModal('task-preview-{{ task.pk }}')"
+                            class="p-1.5 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-gray-100 transition-colors" title="Snel bekijken">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </button>
                     <button onclick="document.getElementById('edit-task-{{ task.pk }}').classList.toggle('hidden')"
                             class="p-1.5 text-gray-400 hover:text-indigo-600 rounded-md hover:bg-gray-100 transition-colors" title="Bewerken">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     </button>
                     <button hx-post="{% url 'dashboard:team_task_delete' team.slug task.pk %}" hx-target="#agents-tasks-area" hx-swap="outerHTML"
-                            hx-confirm="Taak verwijderen?"
+                            hx-confirm="Opdracht verwijderen?"
                             class="p-1.5 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-100 transition-colors" title="Verwijderen">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                     </button>
+                    <!-- Task preview modal -->
+                    <div id="task-preview-{{ task.pk }}" class="hidden preview-modal-backdrop fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onclick="if(event.target===this)closePreviewModal(this)">
+                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto relative">
+                            <button onclick="closePreviewModal(this)" class="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                            <div class="flex items-center gap-2 mb-4 flex-wrap">
+                                <span class="px-2 py-0.5 rounded text-xs font-medium {% if task.agent.is_manager %}bg-purple-100 text-purple-700{% else %}bg-indigo-100 text-indigo-700{% endif %}">
+                                    {% if task.agent.is_manager %}&#9733; {% endif %}{{ task.agent.role }}
+                                </span>
+                                {% for ct in task.context_tasks.all %}
+                                <span class="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">ctx: Opdracht {{ ct.order|add:1 }}</span>
+                                {% endfor %}
+                            </div>
+                            <div class="mb-4">
+                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Beschrijving</span>
+                                <div class="text-sm text-gray-700 mt-1 prose prose-sm max-w-none">{{ task.description|render_markdown }}</div>
+                            </div>
+                            {% if task.expected_output %}
+                            <div>
+                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Verwacht resultaat</span>
+                                <div class="text-sm text-gray-600 mt-1 prose prose-sm max-w-none">{{ task.expected_output|render_markdown }}</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -293,7 +587,7 @@
                             <textarea name="description" rows="4" required class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">{{ task.description }}</textarea>
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">Expected output</label>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Verwacht resultaat</label>
                             <textarea name="expected_output" rows="4" class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">{{ task.expected_output }}</textarea>
                         </div>
                     </div>
@@ -301,18 +595,18 @@
                         <div>
                             <label class="block text-xs font-medium text-gray-600 mb-1">Agent</label>
                             <select name="agent" required class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                                {% for a in agents %}<option value="{{ a.pk }}" {% if a.pk == task.agent_id %}selected{% endif %}>{{ a.role }}</option>{% endfor %}
+                                {% for a in agents %}<option value="{{ a.pk }}" {% if a.pk == task.agent_id %}selected{% endif %}>{{ a.role }}{% if a.is_manager %} (Hoofdagent){% endif %}</option>{% endfor %}
                             </select>
                         </div>
                         {% if tasks|length > 1 %}
                         <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">Context taken</label>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Context opdrachten</label>
                             <div class="flex flex-wrap gap-2 mt-1">
                                 {% for t in tasks %}
                                 {% if t.pk != task.pk %}
                                 <label class="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-md px-2 py-1 cursor-pointer hover:border-indigo-300">
                                     <input type="checkbox" name="context_tasks" value="{{ t.pk }}" {% if task.context_tasks.all|contains_pk:t.pk %}checked{% endif %} class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5">
-                                    Taak {{ t.order|add:1 }}: {{ t.agent.role|truncatechars:20 }}
+                                    Opdracht {{ t.order|add:1 }}: {{ t.agent.role|truncatechars:20 }}
                                 </label>
                                 {% endif %}
                                 {% endfor %}
@@ -333,9 +627,9 @@
     {% else %}
     <div class="px-6 py-8 text-center text-sm text-gray-400">
         {% if agents %}
-            Nog geen taken. Voeg taken toe die door agents worden uitgevoerd.
+            Nog geen opdrachten. Voeg opdrachten toe die door agents worden uitgevoerd.
         {% else %}
-            Voeg eerst agents toe voordat je taken kunt aanmaken.
+            Voeg eerst agents toe voordat je opdrachten kunt aanmaken.
         {% endif %}
     </div>
     {% endif %}

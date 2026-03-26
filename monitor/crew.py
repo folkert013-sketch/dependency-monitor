@@ -36,14 +36,16 @@ def create_crew(requirements_path: str, step_callback=None, task_callback=None) 
     tasks_config = _load_yaml("tasks.yaml")
 
     # Hoofd-agent: pro model voor rapportage en synthese
+    manager_model = os.environ.get("CREW_MANAGER_MODEL", "gemini-3.1-pro-preview")
     manager_llm = LLM(
-        model="gemini/gemini-3.1-pro-preview",
+        model=f"gemini/{manager_model}",
         api_key=os.environ.get("GEMINI_API_KEY", ""),
     )
 
     # Taak-agents: flash model voor snelle uitvoering
+    task_model = os.environ.get("CREW_TASK_MODEL", "gemini-3.1-flash-lite-preview")
     task_llm = LLM(
-        model="gemini/gemini-3-flash-preview",
+        model=f"gemini/{task_model}",
         api_key=os.environ.get("GEMINI_API_KEY", ""),
     )
 

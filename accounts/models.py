@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from .fields import EncryptedCharField
+
 
 class EmailSettings(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="email_settings")
@@ -8,7 +10,7 @@ class EmailSettings(models.Model):
     display_name = models.CharField(max_length=100, blank=True, default="", help_text="Weergavenaam in From header")
     graph_tenant_id = models.CharField(max_length=100, blank=True, default="", help_text="Azure AD Tenant ID")
     graph_client_id = models.CharField(max_length=100, blank=True, default="", help_text="Azure AD Client ID")
-    graph_client_secret = models.CharField(max_length=200, blank=True, default="", help_text="Azure AD Client Secret")
+    graph_client_secret = EncryptedCharField(max_length=500, blank=True, default="", help_text="Azure AD Client Secret (versleuteld opgeslagen)")
 
     class Meta:
         verbose_name = "E-mail instellingen"

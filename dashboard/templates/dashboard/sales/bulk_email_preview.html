@@ -10,8 +10,24 @@
 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
     <div>
         <h1 class="text-3xl font-bold text-gray-900">E-mail preview</h1>
+        {% if template %}
         <p class="text-gray-500 mt-1">Template: <strong>{{ template.name }}</strong></p>
+        {% else %}
+        <p class="text-gray-500 mt-1">Templates per prospect (via toegewezen template)</p>
+        {% endif %}
     </div>
+    {% if email_configured %}
+    <button type="button"
+            hx-post="{% url 'dashboard:htmx_send_test_email' %}"
+            hx-vals='{"template_id": "{{ previews.0.template.pk|escapejs }}", "prospect_slug": "{{ previews.0.prospect.slug|escapejs }}"}'
+            hx-swap="none"
+            hx-disabled-elt="this"
+            hx-confirm="Test e-mail versturen naar jezelf?"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-white text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        Test e-mail naar mijzelf
+    </button>
+    {% endif %}
 </div>
 
 {% if not email_configured %}
@@ -43,6 +59,12 @@
             <span class="font-semibold text-amber-600 ml-1">{{ without_email_count }}</span>
         </div>
         {% endif %}
+        {% if skipped_count %}
+        <div>
+            <span class="text-gray-500">Overgeslagen (geen template):</span>
+            <span class="font-semibold text-red-600 ml-1">{{ skipped_count }}</span>
+        </div>
+        {% endif %}
         {% if email_configured %}
         <div>
             <span class="text-gray-500">Afzender:</span>
@@ -52,10 +74,44 @@
     </div>
 </div>
 
+<!-- Link validation -->
+{% if link_results %}
+<div class="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-5 mb-6">
+    <h3 class="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+        Link-check ({{ link_results|length }} link{{ link_results|length|pluralize:"s" }})
+    </h3>
+    <div class="space-y-2">
+        {% for link in link_results %}
+        <div class="flex items-center gap-2 text-sm">
+            {% if link.ok %}
+            <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span class="text-gray-600 truncate">{{ link.url }}</span>
+            <span class="text-emerald-600 font-medium shrink-0">{{ link.status }}</span>
+            {% else %}
+            <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span class="text-red-700 truncate font-medium">{{ link.url }}</span>
+            <span class="text-red-600 font-semibold shrink-0">{% if link.status %}{{ link.status }}{% else %}Onbereikbaar{% endif %}</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% if has_broken_links %}
+    <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+        <p class="text-sm text-red-700 font-medium">Een of meer links zijn niet bereikbaar. Controleer de URLs voordat je verstuurt.</p>
+    </div>
+    {% else %}
+    <div class="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+        <p class="text-sm text-emerald-700 font-medium">Alle links zijn bereikbaar en werken correct.</p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
 <!-- Preview cards -->
 <form id="send-form">
     {% csrf_token %}
-    <input type="hidden" name="template_id" value="{{ template.pk }}">
+    {% if template %}<input type="hidden" name="template_id" value="{{ template.pk }}">{% endif %}
     <input type="hidden" name="group_slug" value="{{ group.slug }}">
 
     <div class="space-y-4 mb-6">
@@ -69,7 +125,12 @@
                                {% if not item.has_email %}disabled{% endif %}
                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mt-0.5 email-cb">
                         <div class="min-w-0">
-                            <p class="font-semibold text-gray-900 truncate">{{ item.prospect.name }}</p>
+                            <p class="font-semibold text-gray-900 truncate">
+                                {{ item.prospect.name }}
+                                {% if item.recently_sent %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 ml-2">Al gemaild</span>
+                                {% endif %}
+                            </p>
                             {% if item.has_email %}
                             <p class="text-sm text-gray-500">{{ item.prospect.email }}</p>
                             {% else %}
@@ -77,16 +138,50 @@
                             {% endif %}
                         </div>
                     </div>
-                    {% if item.prospect.contact_first_name or item.prospect.contact_last_name %}
-                    <span class="text-xs text-gray-400 flex-shrink-0">{{ item.prospect.contact_first_name }} {{ item.prospect.contact_last_name }}</span>
-                    {% endif %}
+                    <div class="flex items-center gap-3 flex-shrink-0">
+                        <!-- Template + Aanhef badges -->
+                        <div class="flex items-center gap-2">
+                            {% if not template %}
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-50 text-purple-700">{{ item.template.name }}</span>
+                            {% endif %}
+                            {% if item.aanhef %}
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700">{{ item.aanhef }}</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-amber-50 text-amber-700">Geen aanhef</span>
+                            {% endif %}
+                            <select class="aanhef-select rounded-lg border-gray-200 text-xs px-2 py-1 bg-white shadow-sm border"
+                                    data-slug="{{ item.prospect.slug }}"
+                                    onchange="updateAanhef(this)">
+                                {% for value, label in aanhef_choices %}
+                                <option value="{{ value }}" {% if item.prospect.aanhef == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% if item.prospect.contact_first_name or item.prospect.contact_last_name %}
+                        <span class="text-xs text-gray-400">{{ item.prospect.contact_first_name }} {{ item.prospect.contact_last_name }}</span>
+                        {% endif %}
+                    </div>
                 </div>
 
                 {% if item.has_email %}
                 <div class="mt-4 bg-gray-50 rounded-xl p-4">
                     <p class="text-sm font-medium text-gray-700 mb-1">Onderwerp: {{ item.subject }}</p>
-                    <div class="text-sm text-gray-600 whitespace-pre-line">{{ item.body }}</div>
+                    {% if item.has_html %}
+                    <iframe srcdoc="{{ item.html_body }}" sandbox="allow-same-origin" class="w-full border-0 rounded-lg bg-white" style="min-height:200px;" onload="try{this.style.height=Math.min(this.contentDocument.body.scrollHeight+20,600)+'px'}catch(e){}"></iframe>
+                    {% else %}
+                    <div class="text-sm text-gray-600 whitespace-pre-line">{{ item.text_preview }}</div>
+                    {% endif %}
                 </div>
+                {% if item.has_html %}
+                <div class="mt-3 flex justify-end">
+                    <button type="button"
+                            onclick="openProspectPreview('{{ item.prospect.slug|escapejs }}', '{{ item.template.pk|escapejs }}')"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        Volledig scherm
+                    </button>
+                </div>
+                {% endif %}
                 {% endif %}
             </div>
         </div>
@@ -102,6 +197,7 @@
                 hx-swap="none"
                 hx-confirm="Weet je zeker dat je de geselecteerde e-mails wilt versturen?"
                 hx-disabled-elt="this"
+                {% if has_broken_links %}disabled{% endif %}
                 class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 shadow-lg shadow-purple-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
             <span id="send-count-label">Verstuur <span id="send-count">{{ with_email_count }}</span> e-mails</span>
@@ -110,6 +206,23 @@
     {% endif %}
 </form>
 
+<!-- HTML Preview Modal -->
+<div id="html-preview-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeProspectPreview()"></div>
+    <div class="relative w-full max-w-3xl mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden" style="height:85vh;">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                <h3 class="font-semibold text-gray-900">HTML E-mail Preview</h3>
+            </div>
+            <button onclick="closeProspectPreview()" class="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <iframe id="html-preview-iframe" class="w-full border-0" style="height:calc(85vh - 65px);" sandbox="allow-same-origin"></iframe>
+    </div>
+</div>
+
 <script>
 document.querySelectorAll('.email-cb').forEach(function(cb) {
     cb.addEventListener('change', function() {
@@ -117,6 +230,61 @@ document.querySelectorAll('.email-cb').forEach(function(cb) {
         var countEl = document.getElementById('send-count');
         if (countEl) countEl.textContent = checked;
     });
+});
+
+function openProspectPreview(slug, templatePk) {
+    var modal = document.getElementById('html-preview-modal');
+    var iframe = document.getElementById('html-preview-iframe');
+    var url = new URL('/sales/email/preview/' + encodeURIComponent(slug) + '/', window.location.origin);
+    url.searchParams.set('template_id', templatePk);
+    iframe.src = url.toString();
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeProspectPreview() {
+    var modal = document.getElementById('html-preview-modal');
+    var iframe = document.getElementById('html-preview-iframe');
+    iframe.src = '';
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+function updateAanhef(select) {
+    var slug = select.dataset.slug;
+    var aanhef = select.value;
+    var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    var formData = new FormData();
+    formData.append('csrfmiddlewaretoken', csrfToken);
+    formData.append('slugs', slug);
+    formData.append('aanhef', aanhef);
+    formData.append('group_slug', '{{ group.slug }}');
+
+    fetch('{% url "dashboard:htmx_prospect_bulk_update" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+    }).then(function() {
+        // Update the badge next to the dropdown
+        var container = select.closest('.flex.items-center.gap-2');
+        var badge = container.querySelector('span');
+        if (aanhef) {
+            badge.className = 'inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700';
+            badge.textContent = aanhef;
+        } else {
+            badge.className = 'inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-amber-50 text-amber-700';
+            badge.textContent = 'Geen aanhef';
+        }
+    });
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        var modal = document.getElementById('html-preview-modal');
+        if (modal && !modal.classList.contains('hidden')) {
+            closeProspectPreview();
+        }
+    }
 });
 </script>
 {% endblock %}

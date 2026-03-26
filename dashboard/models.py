@@ -1,7 +1,10 @@
+import re
 import uuid
 
+from django.conf import settings as django_settings
 from django.db import IntegrityError, models
 from django.db.models import Sum
+from django.utils import timezone
 from django.utils.text import slugify
 
 
@@ -37,6 +40,10 @@ class Team(models.Model):
     description = models.TextField(blank=True, default="")
     process = models.CharField(max_length=15, choices=PROCESS_CHOICES, default="sequential")
     verbose = models.BooleanField(default=True)
+    owner = models.ForeignKey(
+        django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="teams", null=True, blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -58,6 +65,7 @@ class TeamVariable(models.Model):
         ("text", "Text"),
         ("textarea", "Textarea"),
         ("file_path", "File path"),
+        ("select", "Select"),
     ]
 
     team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="variables")
@@ -66,12 +74,19 @@ class TeamVariable(models.Model):
     description = models.TextField(blank=True, default="")
     input_type = models.CharField(max_length=10, choices=INPUT_TYPE_CHOICES, default="text")
     default_value = models.TextField(blank=True, default="")
+    options = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Keuze-opties voor select type: [{value, label, tools?}]",
+    )
     required = models.BooleanField(default=True)
     order = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["order"]
-        unique_together = [("team", "name")]
+        constraints = [
+            models.UniqueConstraint(fields=["team", "name"], name="unique_team_variable_name"),
+        ]
 
     def __str__(self):
         return f"{self.team.name} — {self.name}"
@@ -94,9 +109,18 @@ class TeamAgent(models.Model):
     tools = models.JSONField(default=list, blank=True)
     max_iter = models.PositiveIntegerField(default=25)
     verbose = models.BooleanField(default=True)
+    is_manager = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["order"]
+
+    def clean(self):
+        if self.is_manager and self.tools:
+            self.tools = []
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.team.name} — {self.role}"
@@ -156,11 +180,13 @@ class ScanJob(models.Model):
         ("fiscal", "Bedrijfsmonitor"),
         ("custom", "Custom Team"),
         ("compliance", "WWFT Compliance"),
+        ("vacancy", "Vacature Monitor"),
+        ("samenstelopdracht", "Samenstelopdracht NV COS 4410"),
     ]
 
     created_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
-    job_type = models.CharField(max_length=15, choices=JOB_TYPE_CHOICES, default="dependency")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending", db_index=True)
+    job_type = models.CharField(max_length=20, choices=JOB_TYPE_CHOICES, default="dependency")
     team = models.ForeignKey(Team, on_delete=models.SET_NULL, null=True, blank=True, related_name="jobs")
     run_variables = models.JSONField(default=dict, blank=True)
     progress_message = models.CharField(max_length=300, default="Scan starten...")
@@ -169,10 +195,29 @@ class ScanJob(models.Model):
     token_count = models.IntegerField(default=0)
     report = models.ForeignKey("Report", on_delete=models.SET_NULL, null=True, blank=True)
     error_message = models.TextField(blank=True, default="")
-    finished_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "-created_at"]),
+        ]
+
+
+class TaskOutput(models.Model):
+    """Stores the full output of each task in a crew run."""
+    job = models.ForeignKey(ScanJob, on_delete=models.CASCADE, related_name="task_outputs")
+    task_order = models.PositiveIntegerField()
+    agent_name = models.CharField(max_length=200)
+    task_description = models.TextField(blank=True, default="")
+    output = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["task_order"]
+
+    def __str__(self):
+        return f"[{self.task_order}] {self.agent_name}"
 
 
 class Report(models.Model):
@@ -227,8 +272,8 @@ class Finding(models.Model):
     ]
 
     report = models.ForeignKey(Report, on_delete=models.CASCADE, related_name="findings")
-    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES)
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, db_index=True)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, db_index=True)
     package_name = models.CharField(max_length=200)
     current_version = models.CharField(max_length=50, blank=True, default="")
     latest_version = models.CharField(max_length=50, blank=True, default="")
@@ -264,9 +309,9 @@ class BlogArticle(models.Model):
     intro = models.TextField(help_text="Korte, pakkende samenvatting (2-3 zinnen)")
     body = models.TextField(help_text="Artikel inhoud in markdown")
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="algemeen")
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft", db_index=True)
     sources = models.JSONField(default=list, blank=True, help_text="Bron-URLs")
-    quality_score = models.IntegerField(default=5, help_text="Kwaliteitsscore 1-10 van reviewer-agent")
+    quality_score = models.PositiveSmallIntegerField(default=5, help_text="Kwaliteitsscore 1-10 van reviewer-agent")
     key_takeaways = models.JSONField(default=list, blank=True, help_text="Kernpunten van het artikel")
     action_items = models.JSONField(default=list, blank=True, help_text="Concrete actiepunten voor de ondernemer")
     deadline_date = models.DateField(null=True, blank=True, help_text="Relevante deadline datum")
@@ -279,6 +324,15 @@ class BlogArticle(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(quality_score__gte=1, quality_score__lte=10),
+                name="quality_score_range",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["status", "-created_at"]),
+        ]
 
     def __str__(self):
         return f"[{self.get_status_display()}] {self.title[:80]}"
@@ -355,6 +409,10 @@ class ProspectGroup(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True, default="")
     slug = models.SlugField(max_length=200, unique=True)
+    owner = models.ForeignKey(
+        django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="prospect_groups", null=True, blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -405,20 +463,24 @@ class Prospect(models.Model):
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
 
     groups = models.ManyToManyField(ProspectGroup, blank=True, related_name="prospects")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new", db_index=True)
     contact_channel = models.CharField(max_length=20, choices=CHANNEL_CHOICES, blank=True, default="")
     contacted_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")
     contact_first_name = models.CharField(max_length=100, blank=True, default="")
     contact_last_name = models.CharField(max_length=100, blank=True, default="")
-    email = models.EmailField(blank=True, default="")
+    email = models.EmailField(blank=True, default="", db_index=True)
     AANHEF_CHOICES = [
         ("", "—"),
         ("Geachte heer", "Geachte heer"),
         ("Geachte mevrouw", "Geachte mevrouw"),
+        ("Geachte heer/mevrouw", "Geachte heer/mevrouw"),
         ("Beste", "Beste"),
     ]
     aanhef = models.CharField(max_length=30, choices=AANHEF_CHOICES, blank=True, default="")
+    assigned_template = models.ForeignKey(
+        "ResponseTemplate", on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_prospects",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -430,6 +492,9 @@ class Prospect(models.Model):
                 condition=~models.Q(place_id=""),
                 name="unique_place_id_when_set",
             ),
+        ]
+        indexes = [
+            models.Index(fields=["status", "-created_at"]),
         ]
 
     def __str__(self):
@@ -576,7 +641,49 @@ class ResponseTemplate(models.Model):
             body = body.replace(placeholder, value)
             if html_body:
                 html_body = html_body.replace(placeholder, html_escape(value))
+        # Clean up spaces before punctuation (from empty replacements)
+        subject = re.sub(r'\s+([,.])', r'\1', subject)
+        body = re.sub(r'\s+([,.])', r'\1', body)
+        if html_body:
+            html_body = re.sub(r'\s+([,.])', r'\1', html_body)
         return subject, body, html_body
+
+    @staticmethod
+    def strip_html_to_text(html):
+        """Extract readable text from an HTML string."""
+        from html.parser import HTMLParser
+        from html import unescape
+
+        class _TextExtractor(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.parts = []
+                self._skip = False
+
+            def handle_starttag(self, tag, attrs):
+                self._skip = tag in ("style", "head", "title")
+                if tag in ("br", "tr", "p", "div", "li", "h1", "h2", "h3"):
+                    self.parts.append("\n")
+
+            def handle_endtag(self, tag):
+                self._skip = False
+
+            def handle_data(self, data):
+                if not self._skip:
+                    self.parts.append(data)
+
+        extractor = _TextExtractor()
+        extractor.feed(unescape(html))
+        text = "".join(extractor.parts)
+        text = re.sub(r'[ \t]+', ' ', text)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
+
+    def get_text_preview(self):
+        """Extract readable text from html_template for preview display."""
+        if not self.html_template:
+            return self.body
+        return self.strip_html_to_text(self.html_template)
 
 
 class ProspectResponse(models.Model):
@@ -644,6 +751,71 @@ class ComplianceReport(models.Model):
         return f"[{self.get_report_type_display()}] {self.entity_name or 'Sectie-check'} — {self.created_at:%Y-%m-%d %H:%M}"
 
 
+class Vacancy(models.Model):
+    """Job vacancy scraped from external sources (Indeed, Jooble, Adzuna)."""
+    SOURCE_CHOICES = [
+        ("jooble", "Jooble"),
+        ("adzuna", "Adzuna"),
+        ("careerjet", "CareerJet"),
+    ]
+    CATEGORY_CHOICES = [
+        ("financieel", "Financieel administratie"),
+        ("data_analyse", "Data-analyse"),
+        ("ict", "ICT en netwerken"),
+        ("zzp_admin", "ZZP Administratie"),
+        ("automatisering", "Automatisering"),
+        ("", "Overig"),
+    ]
+
+    external_id = models.CharField(max_length=300, unique=True)
+    title = models.CharField(max_length=500)
+    company_name = models.CharField(max_length=300, db_index=True)
+    location = models.CharField(max_length=300, blank=True, default="")
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    salary = models.CharField(max_length=200, blank=True, default="")
+    source_url = models.URLField(blank=True, default="", max_length=500)
+    source = models.CharField(max_length=50, choices=SOURCE_CHOICES, db_index=True)
+    published_date = models.DateField(null=True, blank=True)
+    prospect = models.ForeignKey(
+        Prospect, on_delete=models.SET_NULL, null=True, blank=True, related_name="vacancies",
+    )
+    relevance_score = models.IntegerField(default=0)  # 0-100 match score
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-published_date", "-created_at"]
+        verbose_name_plural = "Vacancies"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(relevance_score__gte=0, relevance_score__lte=100),
+                name="relevance_score_range",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.title} — {self.company_name}"
+
+
+class VacancySearch(models.Model):
+    """Logs each vacancy search query for structural monitoring."""
+    query = models.CharField(max_length=500)
+    location = models.CharField(max_length=200, blank=True, default="")
+    sources_used = models.CharField(max_length=200, blank=True, default="")
+    results_count = models.IntegerField(default=0)
+    companies_found = models.IntegerField(default=0)
+    new_companies = models.IntegerField(default=0)
+    avg_relevance = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name_plural = "Vacancy searches"
+
+    def __str__(self):
+        return f"{self.query} ({self.location}) — {self.results_count} results"
+
+
 class BusinessType(models.Model):
     """Manageable business types for Google Places search."""
     google_type = models.CharField(max_length=100, unique=True)
@@ -654,3 +826,346 @@ class BusinessType(models.Model):
 
     def __str__(self):
         return self.label
+
+
+# ---------------------------------------------------------------------------
+# API Usage Tracking
+# ---------------------------------------------------------------------------
+
+class APIUsageLog(models.Model):
+    """Centraal log van alle betaalde API-aanroepen (LLM tokens + Google Places)."""
+    SERVICE_CHOICES = [
+        ("gemini", "Google Gemini"),
+        ("anthropic", "Anthropic Claude"),
+        ("openai", "OpenAI"),
+        ("google_places", "Google Places API"),
+    ]
+
+    service = models.CharField(max_length=20, choices=SERVICE_CHOICES, db_index=True)
+    job = models.ForeignKey("ScanJob", on_delete=models.SET_NULL, null=True, blank=True, related_name="api_usage_logs")
+    description = models.CharField(max_length=300, blank=True, default="")
+
+    # Token metrics (for LLM APIs)
+    input_tokens = models.IntegerField(default=0)
+    output_tokens = models.IntegerField(default=0)
+    total_tokens = models.IntegerField(default=0)
+
+    # Cost
+    estimated_cost = models.DecimalField(max_digits=10, decimal_places=6, default=0)
+
+    # For non-LLM APIs (Places)
+    api_calls = models.IntegerField(default=1)
+
+    # Model info (for LLM calls)
+    model_name = models.CharField(max_length=100, blank=True, default="")
+
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["service", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"[{self.get_service_display()}] {self.description[:60]} — ${self.estimated_cost}"
+
+
+# ---------------------------------------------------------------------------
+# RJ Richtlijnen voor de Jaarverslaggeving
+# ---------------------------------------------------------------------------
+
+class RJHoofdstuk(models.Model):
+    """Een hoofdstuk uit de RJ (bijv. B2 Materiële vaste activa)."""
+    AFDELING_CHOICES = [
+        ("M", "Microrechtspersonen"),
+        ("A", "Algemeen"),
+        ("B", "Jaarrekening"),
+        ("C", "Bijzondere kleine rechtspersonen"),
+        ("D", "Bijlagen"),
+    ]
+
+    code = models.CharField(max_length=10, unique=True)  # "B2", "A1", "M1"
+    titel = models.CharField(max_length=300)
+    afdeling = models.CharField(max_length=1, choices=AFDELING_CHOICES)
+    beschrijving = models.TextField(blank=True, default="")
+    editie = models.CharField(max_length=10, default="2022")
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        verbose_name = "RJ Hoofdstuk"
+        verbose_name_plural = "RJ Hoofdstukken"
+
+    def __str__(self):
+        return f"{self.code} — {self.titel}"
+
+
+class RJSectie(models.Model):
+    """Een paragraaf binnen een RJ-hoofdstuk (bijv. § B2.1 Materiële vaste activa)."""
+    hoofdstuk = models.ForeignKey(RJHoofdstuk, on_delete=models.CASCADE, related_name="secties")
+    paragraaf = models.CharField(max_length=20)  # "B2.1", "M1.1"
+    titel = models.CharField(max_length=300)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(fields=["hoofdstuk", "paragraaf"], name="unique_rj_sectie_paragraaf"),
+        ]
+        verbose_name = "RJ Sectie"
+        verbose_name_plural = "RJ Secties"
+
+    def __str__(self):
+        return f"§ {self.paragraaf} — {self.titel}"
+
+
+class RJAlinea(models.Model):
+    """Een individuele alinea/bepaling uit de RJ (bijv. B2.101)."""
+    from pgvector.django import VectorField
+
+    sectie = models.ForeignKey(RJSectie, on_delete=models.CASCADE, related_name="alineas")
+    nummer = models.CharField(max_length=10)  # "101", "133d"
+    sub_onderwerp = models.CharField(max_length=200, blank=True, default="")
+    inhoud = models.TextField()
+    embedding = VectorField(dimensions=384, null=True, blank=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(fields=["sectie", "nummer"], name="unique_rj_alinea_nummer"),
+        ]
+        verbose_name = "RJ Alinea"
+        verbose_name_plural = "RJ Alinea's"
+
+    def __str__(self):
+        return f"{self.sectie.paragraaf}.{self.nummer}"
+
+    @property
+    def referentie(self):
+        return f"{self.sectie.paragraaf}.{self.nummer}"
+
+
+class RJRubriekMapping(models.Model):
+    """Koppelt jaarrekening-rubrieken aan relevante RJ-hoofdstukken."""
+    rubriek_naam = models.CharField(max_length=200, unique=True)
+    rubriek_code = models.CharField(max_length=20, blank=True, default="")
+    hoofdstukken = models.ManyToManyField(RJHoofdstuk, related_name="rubrieken")
+    beschrijving = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["rubriek_naam"]
+        verbose_name = "RJ Rubriek Mapping"
+        verbose_name_plural = "RJ Rubriek Mappings"
+
+    def __str__(self):
+        return self.rubriek_naam
+
+
+# ---------------------------------------------------------------------------
+# Fiscale Wetgeving (VPB / DB / AWR)
+# ---------------------------------------------------------------------------
+
+class FiscaleWet(models.Model):
+    """Een fiscale wet (bijv. Wet Vpb 1969, Wet DB 1965, AWR)."""
+    code = models.CharField(max_length=20)  # "vpb1969", "db1965", "awr"
+    naam = models.CharField(max_length=300)  # "Wet op de vennootschapsbelasting 1969"
+    afkorting = models.CharField(max_length=50)  # "Wet Vpb 1969"
+    bwb_id = models.CharField(max_length=30, blank=True, default="")  # "BWBR0002672"
+    versie_datum = models.CharField(
+        max_length=10, default="2024-01-01", db_index=True,
+        help_text="Geldigheids-datum, bijv. '2025-01-01'",
+    )
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        verbose_name = "Fiscale Wet"
+        verbose_name_plural = "Fiscale Wetten"
+        constraints = [
+            models.UniqueConstraint(fields=["code", "versie_datum"], name="unique_wet_code_versie"),
+        ]
+
+    def __str__(self):
+        return self.afkorting
+
+
+class FiscaalHoofdstuk(models.Model):
+    """Een hoofdstuk binnen een fiscale wet."""
+    wet = models.ForeignKey(FiscaleWet, on_delete=models.CASCADE, related_name="hoofdstukken")
+    nummer = models.CharField(max_length=20)  # "II", "V", "IIA"
+    titel = models.CharField(max_length=300)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(fields=["wet", "nummer"], name="unique_fiscaal_hoofdstuk"),
+        ]
+        verbose_name = "Fiscaal Hoofdstuk"
+        verbose_name_plural = "Fiscale Hoofdstukken"
+
+    def __str__(self):
+        return f"Hoofdstuk {self.nummer} — {self.titel}"
+
+
+class FiscaalArtikel(models.Model):
+    """Een artikel uit een fiscale wet (bijv. Artikel 13 Wet Vpb 1969)."""
+    hoofdstuk = models.ForeignKey(FiscaalHoofdstuk, on_delete=models.CASCADE, related_name="artikelen")
+    nummer = models.CharField(max_length=20)  # "8", "13", "15b", "10a"
+    titel = models.CharField(max_length=300, blank=True, default="")
+    volledige_tekst = models.TextField(blank=True, default="")
+    is_vervallen = models.BooleanField(default=False)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(fields=["hoofdstuk", "nummer"], name="unique_fiscaal_artikel"),
+        ]
+        verbose_name = "Fiscaal Artikel"
+        verbose_name_plural = "Fiscale Artikelen"
+
+    def __str__(self):
+        wet = self.hoofdstuk.wet.afkorting
+        label = f"Art. {self.nummer} {wet}"
+        if self.titel:
+            label += f" — {self.titel}"
+        return label
+
+    @property
+    def referentie(self):
+        return f"art. {self.nummer} {self.hoofdstuk.wet.afkorting}"
+
+
+class FiscaalLid(models.Model):
+    """Een lid (paragraaf) binnen een fiscaal artikel — atomaire zoekeenheid met embedding."""
+    from pgvector.django import VectorField
+
+    artikel = models.ForeignKey(FiscaalArtikel, on_delete=models.CASCADE, related_name="leden")
+    nummer = models.CharField(max_length=10)  # "1", "2", "3a"
+    inhoud = models.TextField()
+    embedding = VectorField(dimensions=384, null=True, blank=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(fields=["artikel", "nummer"], name="unique_fiscaal_lid"),
+        ]
+        verbose_name = "Fiscaal Lid"
+        verbose_name_plural = "Fiscale Leden"
+
+    def __str__(self):
+        return f"{self.artikel.referentie} lid {self.nummer}"
+
+    @property
+    def referentie(self):
+        return f"{self.artikel.referentie} lid {self.nummer}"
+
+
+class FiscaalConceptMapping(models.Model):
+    """Koppelt fiscale concepten aan relevante wetsartikelen."""
+    concept_naam = models.CharField(max_length=200, unique=True)
+    artikelen = models.ManyToManyField(FiscaalArtikel, related_name="concepten")
+    trefwoorden = models.TextField(blank=True, default="")  # comma-separated
+    beschrijving = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["concept_naam"]
+        verbose_name = "Fiscaal Concept Mapping"
+        verbose_name_plural = "Fiscale Concept Mappings"
+
+    def __str__(self):
+        return self.concept_naam
+
+
+# ---------------------------------------------------------------------------
+# VPB Boek ("Wegwijs in de Vennootschapsbelasting")
+# ---------------------------------------------------------------------------
+
+class VpbBoekHoofdstuk(models.Model):
+    """Een hoofdstuk uit het boek 'Wegwijs in de Vennootschapsbelasting'."""
+    nummer = models.CharField(max_length=10)  # "1", "2", "3"
+    titel = models.CharField(max_length=300)
+    editie = models.CharField(
+        max_length=10, default="2023", db_index=True,
+        help_text="Editie/boekjaar, bijv. '2023' voor 18e druk",
+    )
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        verbose_name = "VPB Boek Hoofdstuk"
+        verbose_name_plural = "VPB Boek Hoofdstukken"
+        constraints = [
+            models.UniqueConstraint(fields=["nummer", "editie"], name="unique_boek_nummer_editie"),
+        ]
+
+    def __str__(self):
+        return f"H{self.nummer} — {self.titel}"
+
+
+class VpbBoekSectie(models.Model):
+    """Een paragraaf/sectie binnen een boek-hoofdstuk."""
+    hoofdstuk = models.ForeignKey(VpbBoekHoofdstuk, on_delete=models.CASCADE, related_name="secties")
+    paragraaf = models.CharField(max_length=20)  # "1.1", "3.2.1"
+    titel = models.CharField(max_length=300)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(fields=["hoofdstuk", "paragraaf"], name="unique_vpbboek_sectie"),
+        ]
+        verbose_name = "VPB Boek Sectie"
+        verbose_name_plural = "VPB Boek Secties"
+
+    def __str__(self):
+        return f"§ {self.paragraaf} — {self.titel}"
+
+
+class VpbBoekPassage(models.Model):
+    """Een tekstpassage uit het VPB-boek — atomaire zoekeenheid met embedding."""
+    from pgvector.django import VectorField
+
+    sectie = models.ForeignKey(VpbBoekSectie, on_delete=models.CASCADE, related_name="passages")
+    volgnummer = models.PositiveIntegerField()
+    inhoud = models.TextField()
+    pagina_start = models.PositiveIntegerField(null=True, blank=True)
+    embedding = VectorField(dimensions=384, null=True, blank=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(fields=["sectie", "volgnummer"], name="unique_vpbboek_passage"),
+        ]
+        verbose_name = "VPB Boek Passage"
+        verbose_name_plural = "VPB Boek Passages"
+
+    def __str__(self):
+        return f"{self.sectie.paragraaf} #{self.volgnummer}"
